@@ -7,5 +7,5 @@
   "workers_dev": true,
   "preview_urls": false,
   "d1_databases": [{ "binding": "DB", "database_name": "dj-zach-b", "database_id": "f13aa71b-f5d7-4c20-921a-5529cd316281", "migrations_dir": "drizzle" }],
-  "vars": { "CF_ACCESS_TEAM_DOMAIN": "", "CF_ACCESS_AUD": "" }
+  "vars": { "CF_ACCESS_TEAM_DOMAIN": "https://winter-thunder-a34f.cloudflareaccess.com", "CF_ACCESS_AUD": "588aef3667162b7135c27e36c7e88565b0c9bd3c349b81035797ca71d589d852" }
 }
