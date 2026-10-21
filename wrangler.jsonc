@@ -6,6 +6,6 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
-  "d1_databases": [{ "binding": "DB", "database_name": "dj-zach-b", "database_id": "00000000-0000-4000-8000-000000000000", "migrations_dir": "drizzle" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "dj-zach-b", "database_id": "f13aa71b-f5d7-4c20-921a-5529cd316281", "migrations_dir": "drizzle" }],
   "vars": { "CF_ACCESS_TEAM_DOMAIN": "", "CF_ACCESS_AUD": "" }
 }
