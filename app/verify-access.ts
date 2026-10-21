@@ -35,7 +35,9 @@ export async function inspectAccessToken(token: string | null, team: string | un
     if (typeof claims.sub !== 'string' || !claims.sub || typeof claims.email !== 'string' || !allowedEmails.has(claims.email.toLowerCase())) return fail('ACCOUNT_NOT_ALLOWED');
     stage = 'KEY_FETCH';
     if (!cached || cached.issuer !== team || cached.expires < Date.now() || !cached.keys.some(k => k.kid === header.kid)) {
-      const response = await fetch(team + '/cdn-cgi/access/certs', { signal: AbortSignal.timeout(5000), redirect: 'error' });
+      // Workers supports manual/follow, not redirect:error. Non-2xx below
+      // rejects redirects without sending anything to another destination.
+      const response = await fetch(team + '/cdn-cgi/access/certs', { signal: AbortSignal.timeout(5000), redirect: 'manual' });
       if (!response.ok) return fail('KEY_FETCH');
       const data = await response.json() as { keys?: Jwk[] };
       if (!Array.isArray(data.keys)) return fail('KEY_RESPONSE');

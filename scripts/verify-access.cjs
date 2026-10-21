@@ -4,7 +4,7 @@ const code=ts.transpileModule(fs.readFileSync('app/verify-access.ts','utf8'),{co
  const pair=await crypto.subtle.generateKey({name:'RSASSA-PKCS1-v1_5',modulusLength:2048,publicExponent:new Uint8Array([1,0,1]),hash:'SHA-256'},true,['sign','verify']);
  const jwk={...await crypto.subtle.exportKey('jwk',pair.publicKey),kid:'test',alg:'RS256',use:'sig'};
  const mod={exports:{}};let fetches=0;
- vm.runInNewContext(code,{module:mod,exports:mod.exports,crypto,Uint8Array,TextEncoder,TextDecoder,atob,Date,JSON,Array,Set,AbortSignal,fetch:async()=>{fetches++;return {ok:true,json:async()=>({keys:[jwk]})}}});
+ vm.runInNewContext(code,{module:mod,exports:mod.exports,crypto,Uint8Array,TextEncoder,TextDecoder,atob,Date,JSON,Array,Set,AbortSignal,fetch:async(url,options)=>{assert.equal(options.redirect,'manual','Workers supports manual, not error; reject redirects via response.ok');fetches++;return {ok:true,json:async()=>({keys:[jwk]})}}});
  const verify=mod.exports.verifyAccessToken,team='https://test.cloudflareaccess.com',aud='test-audience',now=Math.floor(Date.now()/1000);
  const base={iss:team,aud:[aud],iat:now-5,exp:now+300,sub:'authorized-user',email:'3clo1979@gmail.com'};
  const enc=x=>Buffer.from(JSON.stringify(x)).toString('base64url');
