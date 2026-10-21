@@ -1,0 +1,2 @@
+import { getDb } from '../../../db';import {events} from '../../../db/schema';import {and,eq,gte,asc} from 'drizzle-orm';
+export async function GET(){const rows=await getDb().select({id:events.id,title:events.title,date:events.date,start:events.start,end:events.end,venue:events.venue,facebook:events.facebook}).from(events).where(and(eq(events.isPublic,true),gte(events.date,new Date().toISOString().slice(0,10)))).orderBy(asc(events.date));return Response.json(rows,{headers:{'Cache-Control':'no-store'}});}

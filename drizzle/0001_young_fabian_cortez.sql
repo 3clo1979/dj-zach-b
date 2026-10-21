@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `events_date_unique` ON `events` (`date`);
