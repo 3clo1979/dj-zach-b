@@ -6,7 +6,7 @@ The private `/studio` uses the existing Access-protected management APIs; the pu
 
 - **On the Deck:** real Pending testimonial count, New inquiry count, next saved non-blocked event, next seven calendar days, upcoming booking/public-appearance counts. Loading/unavailable counts are `—`, never fabricated zeroes. A blocked date appears in the weekly agenda but is not advertised as the next event.
 - **Booking Desk:** existing inquiry status changes, email/phone links and booking lifecycle. Changing an inquiry to Booked still creates its private schedule entry; changing away releases it.
-- **Calendar:** local calendar dates, month navigation, selected-day details, upcoming/past/all schedule, existing add/remove flows, and unchanged all-day ICS downloads with event times in notes. No empty day implies confirmed availability; phone/Yahoo sync and email notifications are not connected.
+- **Calendar:** local calendar dates, month navigation, selected-day details, upcoming/past/all schedule, add/remove flows, and unchanged all-day ICS downloads with event times in notes. Saved events have a private services/bring-along plan, editable notes and a primary contact; see [EVENT-DETAILS.md](./EVENT-DETAILS.md). No empty day implies confirmed availability; phone/Yahoo sync and email notifications are not connected.
 - **Client Voices:** the existing original-wording, version-checked publish/unpublish/archive/restore flow and audit evidence. The dashboard and navigation badges follow its successful private fetches.
 - **Settings:** original-photo frame upload and practical connection/privacy notes. See [STUDIO-PHOTO.md](./STUDIO-PHOTO.md) for storage limits, authorization, and backup retention.
 
@@ -26,6 +26,6 @@ A standalone local Playwright harness can be prepared in ignored `work/studio-pr
 
 ## Release boundary
 
-The only database change is `0003_private_studio_photo.sql`, creating one empty photo table. It does not contain images or alter customer tables. Existing deployment pipeline remains `pnpm run db:migrate && pnpm run deploy` after building.
+The original control-room database change is `0003_private_studio_photo.sql`, creating one empty photo table. The event-details feature adds the five non-destructive event columns in `0004_private_event_details.sql`, without backfilling or rewriting existing notes/inquiries. Existing deployment pipeline remains `pnpm run db:migrate && pnpm run deploy` after building.
 
 Publishing source, deploying the Worker, applying the table, and uploading an actual photo are distinct external changes. The local implementation does none of them. After authorized release, verify the exact remote commit/build, anonymous denial for Studio/manager/photo URLs, public-site behavior, then authenticated desktop/mobile workflows. A real photo is saved only by an authorized owner action in Studio Settings.

@@ -1,7 +1,28 @@
+import { blankEventDetails, contactLine, inquiryServicePlan, type EventDetails } from '../event-details-contract';
+
 export type Inquiry = { id: string; name: string; email: string; phone: string; date: string; venue: string; eventType: string; guests: string; hours: string; services: string; message: string; status: string; createdAt: string };
-export type Entry = { id: string; title: string; date: string; start: string; end: string; venue: string; type: string; isPublic: boolean; facebook: string; notes: string };
+export type Entry = { id: string; title: string; date: string; start: string; end: string; venue: string; type: string; isPublic: boolean; facebook: string; notes: string; servicePlan: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null; revision: string };
 export const inquiryStatuses = ['New', 'Contacted', 'Quote sent', 'Booked', 'Declined', 'Canceled'];
-export const blankEntry = { title: '', date: '', start: '', end: '', venue: '', type: 'Public appearance', isPublic: false, facebook: '', notes: '' };
+export const blankEntry = { title: '', date: '', start: '', end: '', venue: '', type: 'Public appearance', isPublic: false, facebook: '', ...blankEventDetails };
+
+// A NULL field belongs to a legacy event that has not been initialized yet.
+// An empty string is an intentional owner edit and must never be re-prefilled.
+export function entryDetails(event: Entry, inquiries: Inquiry[]): EventDetails {
+  const inquiry = event.id.startsWith('booking-') ? inquiries.find(item => 'booking-' + item.id === event.id) : undefined;
+  return {
+    servicePlan: event.servicePlan ?? (inquiry ? inquiryServicePlan(inquiry.services) : ''),
+    contactName: event.contactName ?? (inquiry ? contactLine(inquiry.name) : ''),
+    contactEmail: event.contactEmail ?? inquiry?.email ?? '',
+    contactPhone: event.contactPhone ?? (inquiry ? contactLine(inquiry.phone) : ''),
+    notes: event.notes,
+  };
+}
+export function contactPhoneHref(value: string) {
+  const phone = value.trim();
+  // Keep freeform extensions/instructions readable, but do not turn them into a
+  // different dialed number by blindly concatenating all their digits.
+  return /^\+?[\d\s().-]+$/.test(phone) && (phone.match(/\d/g)?.length ?? 0) >= 3 ? 'tel:' + phone.replace(/[^+\d]/g, '') : null;
+}
 
 // Schedule dates are local calendar days, never UTC instants. A UTC date slice
 // drops tonight's bookings in US time zones and shifts dates near midnight.

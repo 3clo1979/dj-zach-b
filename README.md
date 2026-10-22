@@ -21,7 +21,7 @@ Create one Cloudflare Zero Trust Access self-hosted application with these prote
 - `/studio` and `/studio/*`
 - `/api/manage` and `/api/manage/*`
 
-Allow only `3clo1979@gmail.com` and `djzachb@yahoo.com`, using your chosen supported sign-in method. Do not protect the entire public site or `/api/inquiries` or `/api/events`.
+Allow only the two authorized owner accounts, using your chosen supported sign-in method. Do not protect the entire public site or `/api/inquiries` or `/api/events`.
 
 Copy the Access application AUD tag and HTTPS team domain into `wrangler.jsonc` vars (`CF_ACCESS_AUD`, `CF_ACCESS_TEAM_DOMAIN`), then build and redeploy. Example team format: `https://your-team.cloudflareaccess.com` with no trailing slash. These are configuration identifiers, not secrets. Do not commit API tokens, passwords or session cookies.
 
@@ -33,6 +33,7 @@ Before real inquiries are accepted, verify that an anonymous `GET /api/manage` r
 
 - Requests save to D1 as `New`; they are NOT emailed. Email notifications are not configured. Phone/text remains available.
 - Marking an inquiry `Booked` adds a private schedule entry. Changing it out of `Booked` releases that entry. Dates are unique to prevent double booking.
+- Studio calendar entries keep an editable private services/bring-along plan, notes, and primary contact. Inquiry defaults are copied only for new bookings; later edits are version-protected. Removing an entry also removes its private details after confirmation. See [private event details](docs/EVENT-DETAILS.md).
 - Public appearances require staff to explicitly select public visibility. Public API omits client data and internal notes.
 - Calendar export downloads an all-day ICS entry with times in notes; it is not continuous iPhone/Yahoo sync. Existing commitments must be checked manually.
 - Facebook uses the supplied profile and optional public-event links, not automatic Facebook sync.

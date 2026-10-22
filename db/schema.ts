@@ -40,7 +40,10 @@ export const testimonialRateLimits = sqliteTable('testimonial_rate_limits', {
  expiresAt: integer('expires_at').notNull(),
 }, t => [index('testimonial_rate_expiry_idx').on(t.expiresAt)]);
 export const events=sqliteTable('events',{
- id:text('id').primaryKey(),title:text('title').notNull(),date:text('date').notNull().unique(),start:text('start').notNull(),end:text('end').notNull(),venue:text('venue').notNull(),type:text('type').notNull(),isPublic:integer('is_public',{mode:'boolean'}).notNull().default(false),facebook:text('facebook').notNull().default(''),notes:text('notes').notNull().default('')
+ id:text('id').primaryKey(),title:text('title').notNull(),date:text('date').notNull().unique(),start:text('start').notNull(),end:text('end').notNull(),venue:text('venue').notNull(),type:text('type').notNull(),isPublic:integer('is_public',{mode:'boolean'}).notNull().default(false),facebook:text('facebook').notNull().default(''),notes:text('notes').notNull().default(''),
+ // NULL means an older event has not initialized its private details yet.
+ // An explicit empty string is an intentional clear, never an inquiry fallback.
+ servicePlan:text('service_plan'),contactName:text('contact_name'),contactEmail:text('contact_email'),contactPhone:text('contact_phone'),revision:text('revision').notNull().default('legacy')
 });
 
 // Never selected by public APIs. The original photo is not a bundled/static asset.

@@ -19,10 +19,12 @@ if (!process.argv.includes('--zone')) {
   console.log('Studio data verified in America/New_York, Pacific/Honolulu, and UTC.');
   process.exit(0);
 }
+const contractModule = { exports: {} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../app/event-details-contract.ts'), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, { module: contractModule, exports: contractModule.exports });
 const moduleObject = { exports: {} };
 const source = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../app/studio/studio-data.ts'), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-vm.runInNewContext(source, { module: moduleObject, exports: moduleObject.exports, Date, URLSearchParams, Intl });
-const { localDay, calendarDate, formatDay, addDays, shiftMonth, monthDays, dashboard, servicesLabel, parseStudioHash, calendarFile, blankEntry } = moduleObject.exports;
+vm.runInNewContext(source, { module: moduleObject, exports: moduleObject.exports, Date, URLSearchParams, Intl, require: name => { if (name === '../event-details-contract') return contractModule.exports; throw Error(name); } });
+const { localDay, calendarDate, formatDay, addDays, shiftMonth, monthDays, dashboard, servicesLabel, parseStudioHash, calendarFile, blankEntry, entryDetails, contactPhoneHref } = moduleObject.exports;
 const plain = value => JSON.parse(JSON.stringify(value));
 const ids = values => Array.from(values, value => value.id);
 let groups = 0;
@@ -144,4 +146,32 @@ group('ICS all-day dates, exclusive end, stable timestamp, and text escaping', (
     assert.ok(output.includes('DTEND;VALUE=DATE:' + addDays(day, 1).replaceAll('-', '')));
   }
 });
+
+group('legacy private details prefill only null fields, never rewrite notes or intentional clears', () => {
+  const lead = { ...inquiry('lead', 'Booked'), name: 'Primary contact', email: 'local@example.invalid', phone: '(555) 010-1234', services: '["DJ service","Uplighting"]', message: 'Original request' };
+  const legacy = entry('booking-lead', '2026-10-22', 'Private booking', { notes: 'DJ service\nExisting owner notes', servicePlan: null, contactName: null, contactEmail: null, contactPhone: null, revision: 'legacy' });
+  const before = JSON.stringify({ lead, legacy });
+  assert.deepEqual(plain(entryDetails(legacy, [lead])), { servicePlan: 'DJ service\nUplighting', contactName: lead.name, contactEmail: lead.email, contactPhone: lead.phone, notes: legacy.notes });
+  assert.deepEqual(plain(entryDetails({ ...legacy, servicePlan: '', contactName: '', contactEmail: '', contactPhone: '' }, [lead])), { servicePlan: '', contactName: '', contactEmail: '', contactPhone: '', notes: legacy.notes });
+  assert.equal(entryDetails({ ...legacy, contactName: 'Event coordinator' }, [lead]).contactName, 'Event coordinator');
+  assert.equal(entryDetails({ ...legacy, id: 'manual-event' }, [lead]).contactName, '');
+  assert.equal(entryDetails(legacy, []).servicePlan, '');
+  assert.equal(entryDetails(legacy, [{ ...lead, name: 'Pat\nPlanner', phone: '555\r\n0100' }]).contactName, 'Pat Planner');
+  assert.equal(entryDetails(legacy, [{ ...lead, name: 'Pat\nPlanner', phone: '555\r\n0100' }]).contactPhone, '555 0100');
+  assert.equal(JSON.stringify({ lead, legacy }), before, 'prefill is read-only');
+  assert.equal(contractModule.exports.inquiryServicePlan('{'), '');
+  assert.equal(contractModule.exports.inquiryServicePlan('[1,null,"DJ"]'), 'DJ');
+  assert.equal(entryDetails({ ...legacy, notes: 'x'.repeat(3100) }, [lead]).notes.length, 3100, 'legacy notes are never truncated');
+});
+
+group('safe click-to-contact links and new private fields excluded from calendar downloads', () => {
+  assert.equal(contactPhoneHref('+1 (555) 010-1234'), 'tel:+15550101234');
+  assert.equal(contactPhoneHref('555-010-1234 ext 25'), null, 'do not concatenate extension into wrong number');
+  assert.equal(contactPhoneHref('javascript:alert(1)'), null);
+  const privateEntry = entry('local', '2026-10-22', 'Public appearance', { servicePlan: 'SECRET SERVICE PLAN', contactName: 'SECRET CONTACT', contactEmail: 'secret@example.invalid', contactPhone: 'SECRET PHONE', revision: 'secret-revision', notes: 'Existing notes export' });
+  const ics = calendarFile(privateEntry);
+  assert.match(ics, /Existing notes export/);
+  assert.doesNotMatch(ics, /SECRET|secret@example|secret-revision/);
+});
+
 console.log(`Studio data: ${groups} groups passed in ${process.env.TZ}.`);
