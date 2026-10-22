@@ -57,7 +57,7 @@ It adds only:
 3. `testimonial_rate_limits` — expiring counters.
 4. Supporting indexes and `testimonial_submitted_audit` / `testimonial_moderated_audit` triggers.
 
-There are no seed testimonials, no customer data, and no changes/deletes to the existing `inquiries` or `events` tables. Triggers were authored after Drizzle generation; preserve them in future migration work.
+There are no seed testimonials, no customer data, and no changes/deletes to the existing `inquiries` or `events` tables. The nine CREATE statements use `IF NOT EXISTS` so the matching manually applied schema can be adopted by Wrangler migration history without rewriting data. This does not repair differently defined objects; compare the existing schema before using this recovery path for another database. Triggers were authored after Drizzle generation; preserve them in future migration work.
 
 **Do not run remote migration, deploy, or push to an auto-deploying branch until the owner approves both the schema addition and website release.** The local implementation and local tests do not authorize production writes.
 
@@ -79,7 +79,7 @@ After approval, using an authorized Cloudflare session for the existing account:
    pnpm build
    pnpm deploy
    ```
-   If GitHub/Workers Builds is the chosen release route, coordinate the authorized push after migration instead of accidentally deploying twice.
+   For the existing GitHub/Workers Builds release route, the configured deploy command is `pnpm run db:migrate && pnpm run deploy`: it applies pending migrations and then deploys. Leave that command unchanged. Wrangler records successful migrations normally, including adoption of the identical manually applied testimonial schema. Do not manually insert migration-history rows or run a second deployment.
 5. Read-only production checks: `/testimonials` renders, homepage shows an honest empty/selected state, `/api/testimonials` includes only the five public fields, and anonymous/spoofed requests to both `/api/manage` and `/api/manage/testimonials` are denied on both custom domains and the Worker origin. Confirm the authorized Studio sign-in still works and existing inquiries/schedule load.
 6. Test an actual submit → publish → unpublish lifecycle in production **only with separate permission for clearly identified test data**, then clean it up as authorized. Prefer a migrated local/staging database for automated tests. Never publish a fake review on the live site.
 

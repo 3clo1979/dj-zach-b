@@ -156,6 +156,62 @@ async function change(h, id, status, overrides = {}) {
     h.close();
   });
 
+  await group('migration replay preserves manually created schema, all rows, and single-fire audit triggers', async () => {
+    const migration = fs.readFileSync(path.join(root, 'drizzle', migrations[2]), 'utf8');
+    const objectNames = [
+      'testimonial_audit', 'testimonial_audit_item_idx', 'testimonial_rate_limits',
+      'testimonial_rate_expiry_idx', 'testimonials', 'testimonials_submission_key_unique',
+      'testimonials_status_created_idx', 'testimonial_submitted_audit', 'testimonial_moderated_audit',
+    ];
+    assert.equal((migration.match(/CREATE\s+(?:UNIQUE\s+)?(?:TABLE|INDEX|TRIGGER)\s+IF NOT EXISTS\b/gi) || []).length, 9,
+      'all nine additive objects must be safe to replay');
+    const schema = h => h.sqlite.prepare(`SELECT type,name,tbl_name,sql FROM sqlite_schema WHERE name IN (${objectNames.map(() => '?').join(',')}) ORDER BY name`)
+      .all(...objectNames).map(row => ({ ...row, sql: row.sql.replace(/\s+/g, ' ').trim() }));
+    const snapshot = h => Object.fromEntries(['inquiries', 'events', 'testimonials', 'testimonial_audit', 'testimonial_rate_limits', 'sqlite_sequence']
+      .map(table => [table, h.sqlite.prepare('SELECT * FROM ' + table + ' ORDER BY rowid').all().map(row => ({ ...row }))]));
+    const h = harness({ migrate: false });
+    for (const name of migrations.slice(0, 2)) h.sqlite.exec(fs.readFileSync(path.join(root, 'drizzle', name), 'utf8'));
+    // A manually applied console script omits Drizzle markers/comments. Same DDL,
+    // no migration-history row: the automatic deployment will encounter it again.
+    const consoleSql = migration.replace(/^\s*--[^\n]*(?:\n|$)/gm, '');
+    h.sqlite.exec(consoleSql);
+    const fresh = harness();
+    assert.equal(schema(h).length, 9);
+    assert.deepEqual(schema(h), schema(fresh), 'console and fresh migrations have identical definitions');
+    for (const table of ['testimonials', 'testimonial_audit', 'testimonial_rate_limits']) {
+      for (const pragma of ['table_info', 'foreign_key_list', 'index_list']) {
+        assert.deepEqual(h.sqlite.prepare(`PRAGMA ${pragma}(${table})`).all(), fresh.sqlite.prepare(`PRAGMA ${pragma}(${table})`).all(), table + ' ' + pragma);
+      }
+    }
+    fresh.close();
+    h.sqlite.exec(`INSERT INTO inquiries VALUES ('replay-lead','Local QA','before@example.test','4405550100','2027-07-01','Local venue','Wedding','40','5-9','["DJ service"]','Existing private message','Booked','2026-10-01');
+      INSERT INTO events VALUES ('replay-event','Existing event','2027-07-01','','','Local venue','Private booking',0,'','Existing private note');`);
+    const existing = valid();
+    await expect(await h.public.POST(req(existing)), 201, 'existing testimonial before replay');
+    h.signIn(); await expect(await change(h, existing.submissionId, 'Published'), 200, 'existing publication before replay');
+    const beforeRows = snapshot(h), beforeSchema = schema(h);
+    assert.ok(beforeRows.testimonial_audit.length > 0 && beforeRows.testimonial_rate_limits.length > 0, 'audit and rate records included');
+    const beforeChanges = h.sqlite.prepare('SELECT total_changes() AS count').get().count;
+    h.sqlite.exec(migration);
+    h.sqlite.exec(migration);
+    assert.deepEqual(snapshot(h), beforeRows, 'replays preserve every existing row and sequence');
+    assert.deepEqual(schema(h), beforeSchema, 'all nine schema objects remain unchanged');
+    assert.equal(h.sqlite.prepare('SELECT total_changes() AS count').get().count, beforeChanges, 'replay performs no row writes');
+    const next = valid({ email: 'after-replay@example.test' });
+    await expect(await h.public.POST(req(next)), 201, 'new submission after replay');
+    assert.equal(h.audit(next.submissionId).length, 1, 'submission trigger fires exactly once');
+    await expect(await change(h, next.submissionId, 'Published'), 200, 'moderation after replay');
+    assert.equal(h.audit(next.submissionId).length, 2, 'moderation trigger fires exactly once');
+    await expect(await change(h, next.submissionId, 'Published'), 200, 'unchanged moderation after replay');
+    assert.equal(h.audit(next.submissionId).length, 2, 'repeated state does not duplicate audit');
+    assert.equal(h.audit(existing.submissionId).length, 2, 'existing audit remains unchanged');
+    assert.throws(() => h.sqlite.exec("UPDATE testimonials SET status = 'Invalid'"), /CHECK/, 'status constraint survives replay');
+    assert.throws(() => h.sqlite.exec('UPDATE testimonials SET published_at = NULL'), /CHECK/, 'publication constraint survives replay');
+    assert.throws(() => h.sqlite.exec("UPDATE testimonials SET submission_key = 'duplicate-key'"), /UNIQUE/, 'unique retry-token constraint survives replay');
+    assert.throws(() => h.sqlite.exec("INSERT INTO testimonial_audit (testimonial_id,to_status,created_at) VALUES ('missing','Pending','now')"), /FOREIGN KEY/, 'audit foreign key survives replay');
+    h.close();
+  });
+
   await group('anonymous and non-allowlisted managers cannot read or mutate', async () => {
     const h = harness();
     await expect(await h.manage.GET(), 403, 'anonymous manager read');
