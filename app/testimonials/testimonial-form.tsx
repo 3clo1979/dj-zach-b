@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { ArrowLeft, ArrowUpRight, Check, MessageSquare } from 'lucide-react';
 import { TESTIMONIAL_CONSENT_VERSION, testimonialEventTypes } from '../testimonials-contract';
 
@@ -59,11 +58,11 @@ export default function TestimonialForm() {
   return <>
     <a className="skip" href="#share-experience">Skip to form</a>
     <header className="site-header testimonial-site-header">
-      <Link className="wordmark" href="/" aria-label="DJ Zach B home">
+      <a className="wordmark" href="/" aria-label="DJ Zach B home">
         <img className="header-logo" src="/images/dj-zach-b-logo.png" alt="" width="88" height="88" />
         <span>DJ ZACH B<small>MUSIC FOR YOUR MOMENTS</small></span>
-      </Link>
-      <Link className="text-link" href="/"><ArrowLeft size={15} aria-hidden="true" /> Back to the website</Link>
+      </a>
+      <a className="text-link" href="/"><ArrowLeft size={15} aria-hidden="true" /> Back to the website</a>
     </header>
     <main id="share-experience" className="testimonial-page wrap">
       <div className="testimonial-intro">
@@ -82,7 +81,7 @@ export default function TestimonialForm() {
           <div className="section-index">SAVED FOR ZACH TO REVIEW</div>
           <h2 ref={successHeading} tabIndex={-1}>Thank you for<br/><em>sharing your night.</em></h2>
           <p>Your testimonial is pending review. If selected, your words, display name, and event type may appear on the website. Your email stays private.</p>
-          <Link className="text-link" href="/#client-testimonials">Back to the website <ArrowUpRight size={18} aria-hidden="true" /></Link>
+          <a className="text-link" href="/#client-testimonials">Back to the website <ArrowUpRight size={18} aria-hidden="true" /></a>
         </div> : <form onSubmit={submit} aria-busy={sending}>
           <div className="form-heading"><span>SHARE YOUR EXPERIENCE</span><MessageSquare size={18} aria-hidden="true" /></div>
           <p className="testimonial-form-note">All fields below are required. Please share only your own experience, and leave out private details about other people.</p>
@@ -114,6 +113,6 @@ export default function TestimonialForm() {
         </form>}
       </div>
     </main>
-    <div className="testimonial-page-bottom wrap"><span>DJ ZACH B · YOUR DAY. YOUR WAY.</span><Link href="/">Back to the music ↑</Link></div>
+    <div className="testimonial-page-bottom wrap"><span>DJ ZACH B · YOUR DAY. YOUR WAY.</span><a href="/">Back to the music ↑</a></div>
   </>;
 }

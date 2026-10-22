@@ -51,8 +51,8 @@ function harness(file, fetchImpl = () => { throw new Error('Unexpected network r
       fetch: fetchImpl,
       require(name) {
         if (name === 'react') return hooks;
-        // Preserve anchor semantics without Next router machinery in a unit harness.
-        if (name === 'next/link') return { __esModule: true, default: 'a' };
+        // Native document navigation avoids the deployed Vinext Link/RSC router failure.
+        if (name === 'next/link') throw new Error('Testimonial navigation must use native anchors, not a mocked framework router.');
         if (name.includes('testimonials-contract')) return load(path.join(root, 'app/testimonials-contract.ts'));
         return require(name);
       },
@@ -117,6 +117,8 @@ function populate(form) {
     });
   });
   const initial = form.html();
+  const homeLink = form.find(node => node.type === 'a' && node.props?.href === '/');
+  assert(homeLink && !homeLink.props.onClick, 'form return link uses native browser navigation');
   assert.match(initial, /id="testimonial-consent"[^>]*required=""/, 'publication consent is required');
   assert(!initial.includes('checked=""'), 'publication consent is not preselected');
   assert.match(initial, /PRIVATE · NEVER DISPLAYED/, 'private email label');
@@ -176,6 +178,8 @@ function populate(form) {
     return new Response(reads === 1 ? '{}' : '[]', { status: reads === 1 ? 503 : 200 });
   });
   assert.match(section.html(), /Loading client testimonials/);
+  const shareLink = section.find(node => node.type === 'a' && node.props?.href === '/testimonials');
+  assert(shareLink && !shareLink.props.onClick, 'homepage form link uses native browser navigation');
   assert.match(section.html(), /Selected client/);
   assert.match(section.html(), /not a complete collection of customer reviews/);
   assert(!section.html().includes('<blockquote'), 'no made-up quotes while loading');

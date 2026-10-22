@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { ArrowUpRight, MessageSquare } from 'lucide-react';
 import type { PublicTestimonial } from './testimonials-contract';
 
@@ -27,7 +26,7 @@ export default function TestimonialsSection() {
   return <section id="client-testimonials" className="client-testimonials wrap" aria-labelledby="testimonials-title">
     <div className="testimonials-heading">
       <div><div className="section-index">THE NIGHT, IN THEIR WORDS</div><h2 id="testimonials-title">Selected client<br/><em>testimonials.</em></h2></div>
-      <div><p>A curated selection of experiences shared with Zach and published with permission—not a complete collection of customer reviews.</p><Link className="text-link" href="/testimonials">Share your experience <ArrowUpRight size={18} aria-hidden="true" /></Link></div>
+      <div><p>A curated selection of experiences shared with Zach and published with permission—not a complete collection of customer reviews.</p><a className="text-link" href="/testimonials">Share your experience <ArrowUpRight size={18} aria-hidden="true" /></a></div>
     </div>
     {status === 'loading' ? <p className="testimonial-state" role="status">Loading client testimonials…</p> : status === 'error' ? <div className="testimonial-state" role="status"><p>We couldn’t load testimonials right now.</p><button className="text-link" onClick={() => { setStatus('loading'); setRetry(value => value + 1); }}>Try again</button></div> : testimonials.length ? <div className="testimonials-grid">{testimonials.map(testimonial => <figure className="testimonial-card" key={testimonial.id}>
       <MessageSquare size={23} aria-hidden="true" />
