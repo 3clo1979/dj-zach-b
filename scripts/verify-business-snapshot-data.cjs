@@ -16,13 +16,16 @@ if (!process.argv.includes('--zone')) {
 }
 const mod = { exports: {} };
 const source = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../app/studio/business-snapshot-data.ts'), 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-vm.runInNewContext(source, { module: mod, exports: mod.exports, Date, Intl });
+const contract = { exports: {} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('app/booking-finance-contract.ts', 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, { module: contract, exports: contract.exports, Date, Intl });
+vm.runInNewContext(source, { module: mod, exports: mod.exports, Date, Intl, require: name => name === '../booking-finance-contract' ? contract.exports : require(name) });
 const { businessSnapshot, BUSINESS_TIME_ZONE } = mod.exports;
 const plain = value => JSON.parse(JSON.stringify(value));
 const now = new Date('2026-10-22T14:00:00Z');
 const inquiry = (id, createdAt = '2026-10-12T12:00:00Z', status = 'New', extras = {}) => ({ id, name: 'Fictional customer ' + id, email: 'customer@example.invalid', phone: '5550100', date: '2027-04-20', venue: 'Fictional venue', eventType: 'Wedding', guests: '80', hours: '5', services: '[]', message: '', status, createdAt, ...extras });
 const entry = (id, date = '2027-04-20', extras = {}) => ({ id, title: 'Fictional booking ' + id, date, start: '', end: '', venue: '', type: 'Private booking', isPublic: false, facebook: '', notes: '', servicePlan: null, contactName: null, contactEmail: null, contactPhone: null, revision: 'legacy', ...extras });
-const snapshot = (inquiries = [], events = [], at = now) => businessSnapshot(inquiries, events, at);
+const snapshot = (inquiries = [], events = [], at = now, financialRecords = []) => businessSnapshot(inquiries, events, at, financialRecords);
+const payment = (id, inquiryId = 'real', paidOn = '2026-10-10', amountCents = 10_000, extra = {}) => ({ id, inquiryId, paidOn, amountCents, kind: 'payment', voidedAt: null, method: 'Cash', createdAt: '2026-10-22T12:00:00Z', createdBy: 'owner@example.test', voidedBy: null, voidReason: null, ...extra });
 let groups = 0;
 function group(name, fn) { fn(); groups++; console.log(`✓ [${process.env.TZ}] ${name}`); }
 
@@ -191,7 +194,104 @@ group('projection never mutates source data or returns identifying/contact field
   const result = snapshot(rows, events);
   assert.equal(JSON.stringify({ rows, events, now }), before);
   assert.doesNotMatch(JSON.stringify(result), /SECRET|secret@|secret-contact/);
-  assert.deepEqual(Object.keys(result).sort(), ['windows', 'current', 'prior', 'trend', 'followUps', 'upcomingBookings', 'excludedInquiryCount', 'excludedEventCount', 'invalidCreatedAtCount', 'futureCreatedAtCount', 'invalidEventDateCount'].sort());
+  assert.deepEqual(Object.keys(result).sort(), ['windows', 'current', 'prior', 'trend', 'followUps', 'upcomingBookings', 'excludedInquiryCount', 'excludedEventCount', 'invalidCreatedAtCount', 'futureCreatedAtCount', 'invalidEventDateCount', 'bookedValue', 'recorded', 'discovery'].sort());
+});
+
+group('agreed value is current Booked inventory with honest known/unknown coverage and explicit zero', () => {
+  const rows = [
+    inquiry('priced', '2025-01-01T12:00:00Z', 'Booked', { bookedAmountCents: 123_456, quotedAmountCents: 234_567 }),
+    inquiry('free', undefined, 'Booked', { bookedAmountCents: 0 }),
+    inquiry('legacy', undefined, 'Booked', { bookedAmountCents: null }),
+    inquiry('missing', undefined, 'Booked'),
+    inquiry('canceled', undefined, 'Canceled', { bookedAmountCents: 200_000 }),
+    inquiry('quote', undefined, 'Quote sent', { quotedAmountCents: 300_000, bookedAmountCents: 100 }),
+    inquiry('training', undefined, 'Booked', { bookedAmountCents: 900_000, email: 'fixture@example.test' }),
+  ];
+  const value = snapshot(rows, [entry('manual')]).bookedValue;
+  assert.deepEqual(plain(value), { total: 4, known: 2, unknown: 2, amountCents: 123_456, invalidAmountCount: 0 });
+  assert.equal(snapshot([inquiry('zero', undefined, 'Booked', { bookedAmountCents: 0 })]).bookedValue.amountCents, 0);
+  assert.equal(snapshot([inquiry('unknown', undefined, 'Booked')]).bookedValue.amountCents, null);
+  assert.equal(snapshot().bookedValue.amountCents, null);
+  const invalid = [-1, NaN, Infinity, 1.5, '100', 100_000_000, Number.MAX_SAFE_INTEGER + 1];
+  const bad = snapshot(invalid.map((bookedAmountCents, index) => inquiry('bad-' + index, undefined, 'Booked', { bookedAmountCents }))).bookedValue;
+  assert.equal(bad.unknown, invalid.length); assert.equal(bad.invalidAmountCount, invalid.length); assert.equal(bad.amountCents, null);
+});
+
+group('recorded money follows entered calendar dates, not inquiry creation, booking status, or record entry time', () => {
+  const rows = [inquiry('real', '2025-01-01T12:00:00Z', 'Canceled')];
+  const ledger = [
+    payment('older', 'real', '2026-08-22', 101), payment('prior-start', 'real', '2026-08-23', 102),
+    payment('prior-end', 'real', '2026-09-21', 103), payment('start', 'real', '2026-09-22', 104),
+    payment('end', 'real', '2026-10-21', 105), payment('refund', 'real', '2026-10-21', 200, { kind: 'refund' }),
+    payment('today', 'real', '2026-10-22', 106), payment('future', 'real', '2026-10-23', 107),
+  ];
+  const result = snapshot(rows, [], now, ledger);
+  assert.deepEqual(plain(result.recorded.current), { paymentsCents: 209, refundsCents: 200, netCents: 9, paymentCount: 2, refundCount: 1 });
+  assert.deepEqual(plain(result.recorded.prior), { paymentsCents: 205, refundsCents: 0, netCents: 205, paymentCount: 2, refundCount: 0 });
+  assert.deepEqual(plain(result.recorded.allTime), { paymentsCents: 621, refundsCents: 200, netCents: 421, paymentCount: 6, refundCount: 1 });
+  assert.equal(result.recorded.futureCount, 1); assert.equal(result.current.inquiries, 0);
+  const rebooked = snapshot(rows.map(row => ({ ...row, status: 'Booked' })), [entry('booking-real')], now, ledger);
+  assert.deepEqual(plain(rebooked.recorded), plain(result.recorded), 'rebooking and regenerated calendar event cannot duplicate the permanent inquiry ledger');
+  assert.equal(snapshot(rows, [], now, [payment('old', 'real', '2026-08-22', 500), payment('refund-only', 'real', '2026-10-21', 500, { kind: 'refund' })]).recorded.current.netCents, -500, 'refund of an earlier deposit legitimately makes a later period negative');
+});
+
+group('voided rows, known TEST-linked money, orphans, and repeated IDs never enter recorded totals', () => {
+  const rows = [inquiry('real'), inquiry('test', undefined, 'Booked', { email: 'training@example.test' }), inquiry('test-label', undefined, 'Booked', { name: 'TEST Deployment Check' })];
+  const ledger = [
+    payment('valid'), payment('valid'),
+    payment('voided', 'real', undefined, 500, { voidedAt: '2026-10-22T12:00:00Z', voidReason: 'Wrong entry' }),
+    payment('test-payment', 'test'), payment('test-refund', 'test', undefined, 100, { kind: 'refund' }), payment('test-name', 'test-label'),
+    payment('orphan', 'missing'),
+  ];
+  const result = snapshot(rows, [], now, ledger).recorded;
+  assert.equal(result.current.paymentsCents, 10_000); assert.equal(result.current.refundsCents, 0);
+  assert.equal(result.excludedTestCount, 3); assert.equal(result.voidedCount, 1); assert.equal(result.orphanCount, 1); assert.equal(result.duplicateCount, 1);
+});
+
+group('invalid money and malformed payment dates are excluded with visible data-quality counts', () => {
+  const ledger = [-1, 0, 1.01, NaN, Infinity, '100', 100_000_000, Number.MAX_SAFE_INTEGER + 1].map((amount, index) => payment('amount-' + index, 'real', '2026-10-10', amount));
+  ledger.push(...['2026-02-30', '2026-10-10T12:00:00Z', '2026-1-1', ''].map((day, index) => payment('day-' + index, 'real', day)));
+  ledger.push(payment('unknown-kind', 'real', undefined, 10_000, { kind: 'charge' }));
+  const result = snapshot([inquiry('real')], [], now, ledger).recorded;
+  assert.equal(result.invalidCount, ledger.length); assert.equal(result.current.netCents, 0); assert.equal(result.allTime.paymentCount, 0);
+});
+
+group('entered financial days remain timezone-stable across midnight and both DST transitions', () => {
+  const rows = [inquiry('real')];
+  const same = [payment('today', 'real', '2026-10-22')];
+  assert.equal(snapshot(rows, [], new Date('2026-10-23T00:15:00Z'), same).recorded.current.paymentCount, 0);
+  assert.equal(snapshot(rows, [], new Date('2026-10-23T04:00:00Z'), same).recorded.current.paymentCount, 1);
+  const spring = snapshot(rows, [], new Date('2026-03-09T14:00:00Z'), [payment('first', 'real', '2026-02-07'), payment('last', 'real', '2026-03-08'), payment('today', 'real', '2026-03-09')]);
+  assert.equal(spring.recorded.current.paymentCount, 2); assert.equal(spring.recorded.allTime.paymentCount, 3);
+  const fall = snapshot(rows, [], new Date('2026-11-02T15:00:00Z'), [payment('first', 'real', '2026-10-03'), payment('last', 'real', '2026-11-01'), payment('today', 'real', '2026-11-02')]);
+  assert.equal(fall.recorded.current.paymentCount, 2); assert.equal(fall.recorded.allTime.paymentCount, 3);
+});
+
+group('discovery is optional customer-reported enum data in the received cohort, never inferred from the website', () => {
+  const result = snapshot([
+    inquiry('google', undefined, 'Booked', { referralSource: 'Google' }),
+    inquiry('other', undefined, 'New', { referralSource: 'Other', referralOther: 'SECRET referral wording' }),
+    inquiry('old', '2026-07-01T12:00:00Z', 'Booked', { referralSource: 'Google' }),
+    inquiry('legacy', undefined, 'New', { referralSource: null }),
+    inquiry('missing'), inquiry('invalid', undefined, 'New', { referralSource: 'Unrecognized source' }),
+    inquiry('test', undefined, 'New', { referralSource: 'Google', email: 'fixture@example.test' }),
+  ]);
+  assert.equal(result.discovery.total, 5); assert.equal(result.discovery.known, 2); assert.equal(result.discovery.unknown, 3);
+  assert.equal(result.discovery.sources.find(source => source.source === 'Google').count, 1);
+  assert.equal(result.discovery.sources.find(source => source.source === 'Other').count, 1);
+  assert.equal(result.discovery.sources.reduce((sum, source) => sum + source.count, 0), 2);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|Unrecognized source|fixture@/);
+});
+
+group('financial projections never mutate data or return ledger identity, actor, reason, or free-text attribution', () => {
+  const rows = [inquiry('SECRET INQUIRY', undefined, 'Booked', { bookedAmountCents: 500, referralSource: 'Other', referralOther: 'SECRET OTHER' })];
+  const ledger = [payment('SECRET PAYMENT', 'SECRET INQUIRY', undefined, 500, { createdBy: 'secret-owner@example.test', voidReason: 'SECRET REASON' })];
+  const before = JSON.stringify({ rows, ledger });
+  rows.forEach(Object.freeze); ledger.forEach(Object.freeze); Object.freeze(rows); Object.freeze(ledger);
+  const result = snapshot(rows, [], now, ledger);
+  assert.equal(JSON.stringify({ rows, ledger }), before);
+  assert.equal(result.recorded.current.netCents, 500);
+  assert.doesNotMatch(JSON.stringify(result), /SECRET|secret-owner|inquiryId|createdBy|voidReason|referralOther/);
 });
 
 console.log(`Business Snapshot data: ${groups} groups passed in ${process.env.TZ}.`);

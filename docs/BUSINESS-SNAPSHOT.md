@@ -1,12 +1,12 @@
-# Business Snapshot — phase 1
+# Business Snapshot — inquiry and manual finance metrics
 
-The private Studio has a read-only **Business Snapshot** destination (`/studio#snapshot`), also linked from On the Deck. It calculates aggregates from the existing authenticated `/api/manage` load. It creates no API, database field, migration, analytics request, payment connection, background job, or external write.
+The private Studio has a read-only **Business Snapshot** destination (`/studio#snapshot`), also linked from On the Deck. It calculates aggregates from the existing authenticated `/api/manage` load. It sends no analytics request, connects no payment provider, and makes no external write. Phase 2 uses the private nullable amounts and manual financial records described in [BOOKING-FINANCES.md](./BOOKING-FINANCES.md).
 
 ## What each number means
 
 - **Website inquiries:** saved inquiry submissions whose `createdAt` falls in the last 30 **complete** America/New_York calendar days. Today is excluded, and the comparison uses the preceding 30 complete days. These are requests, not distinct visitors or people. A zero means no saved matching records; it does not prove the website was online/tracking for the whole period.
 - **Booked from these inquiries:** the same received-date cohort, filtered to its current exact `Booked` status. This is not the number of bookings confirmed during the period. Requested event dates and schedule dates never determine the inquiry cohort. Canceled/declined inquiries remain in the denominator but not the Booked numerator.
-- **Inquiry → booking:** currently Booked / received inquiries in each cohort, shown as a percentage. An empty denominator displays `—`, not 0% or infinity. Both cohorts are evaluated at refresh time; the older cohort has had more time to convert. No booking timestamp or inquiry-status history exists, so historical conversion or booking-confirmation trends cannot be reconstructed.
+- **Inquiry → booking:** currently Booked / received inquiries in each cohort, shown as a percentage. An empty denominator displays `—`, not 0% or infinity. Both cohorts are evaluated at refresh time; the older cohort has had more time to convert. Actual status transitions are recorded only from phase 2 onward; earlier booking-confirmation dates remain unknown. This metric continues to use current status, not those later transition dates. Historical conversion cannot be reconstructed.
 - **Awaiting first follow-up:** all saved, non-TEST inquiries currently marked exactly `New`, including today's inquiries. Seven-day aging counts New York calendar boundaries since receipt, not elapsed 168-hour periods. No contact log or follow-up due-date field exists; the name is a status-based reminder, not evidence a client has never been contacted. The link opens the existing New filter in Booking Desk.
 - **Monthly inquiry trend:** six calendar months based on received timestamps, including the current partial month through the last refresh. Current-month bars are marked as partial and not used as a like-for-like full-month comparison. Earlier empty months mean no saved records, not verified instrumentation coverage.
 - **Upcoming private bookings:** currently saved `Private booking` entries dated today or later in New York, split between `booking-<inquiry id>` entries and manually created entries. This inventory is independent of the 30-day cohorts. Public appearances, blocked dates, and past dates do not count. The established ID convention identifies linked entries even if an older source inquiry is absent.
@@ -27,13 +27,21 @@ An event is excluded if its title/contact name or contact email meets the same r
 
 `createdAt` must be a valid ISO instant with `Z` or an explicit offset, including seconds. Date-only, ambiguous local, impossible/rollover, and future timestamps are excluded from dated inquiry metrics. New-status records with such timestamps remain in the current queue with unknown age. Invalid event calendar dates are excluded from upcoming counts. Counts of these problems appear in “How these numbers work.” The helper emits aggregate counts and dates, never customer names, contact details, messages, event titles, or IDs.
 
+## Manual financial and discovery-source metrics
+
+- **Known agreed booking value:** sum of nonnegative integer-cent `bookedAmountCents` for currently Booked, non-TEST inquiries, across all receipt dates. Known/unknown amount coverage is shown alongside it. A recorded zero is known; NULL/omitted is unknown. This is not total business revenue or cash received. Calendar-only entries have no amounts in this release and are not silently assigned zero.
+- **Recorded payments, refunds, and net received:** manual, non-voided financial records dated within the same displayed last-30-complete-day window, using their `paidOn` calendar date. This is a different cohort from inquiries received. Receipts/refunds remain included after cancellation, and rebooking does not duplicate them. Net for a window can legitimately be negative when refunds in that window exceed receipts in that window; it is not an amount due. These are not provider-verified deposits, profit, or ROI.
+- **How clients found you:** counts the optional source enum in the current inquiry-received cohort. Missing/legacy source values are unknown, not “Website.” Other free-text descriptions never appear in the aggregate projection. The source is self-reported discovery, not verified marketing attribution.
+
+Financial records tied to known TEST inquiries are excluded. Orphaned records and malformed financial values/dates are omitted with quality counts instead of being treated as valid zeroes. Payment date labels are already local calendar dates, so they are never shifted through UTC. Financial actor identities, IDs, names, contacts, and descriptions are not returned by this aggregate helper.
+
 ## What remains unavailable
 
 - Visits, unique visitors, daily average traffic, and visitor-to-inquiry conversion: **Not connected**.
-- Contracted booking value and payments collected: **Not configured**. No dollars are inferred from a Booked status.
+- Complete accounting, automatically reconciled payment-provider receipts, and costs: **Not connected**. Only explicitly entered amounts are used; no dollars are inferred from a Booked status.
 - ROI: **Not available yet**. It requires attributed revenue and costs, not just a booking conversion percentage.
 
-There are no pretend Connect buttons, fabricated demo metrics, credentials, or silently configured services. Connecting analytics and recording amounts/payments/costs are later phases.
+There are no pretend Connect buttons, fabricated demo metrics, credentials, or silently configured services. Connecting analytics, payment providers, and costs remains outside this release.
 
 ## Verification and release
 
@@ -46,4 +54,4 @@ Run `pnpm test && pnpm typecheck && pnpm build`. Focused lint is `pnpm exec esli
 
 These are deterministic component/server tests, not authenticated browser visual QA. Inspect desktop/mobile layouts, tab focus, Back/Forward, refresh, and a real authorized owner session before claiming that broader verification.
 
-This phase needs **no new migration, configuration variable, dependency, permission, or production data backfill**. All existing migrations and deployment configuration remain unchanged. Publication/deployment require the owner's explicit approval; no local implementation/test step grants it.
+Phase 2 requires the additive `0005_booking_finances.sql` migration through the existing approved deployment pipeline. No new configuration variable, dependency, integration permission, or production data backfill is required. Earlier migrations and deployment configuration remain unchanged. Publication/deployment require the owner's explicit approval; no local implementation/test step grants it.

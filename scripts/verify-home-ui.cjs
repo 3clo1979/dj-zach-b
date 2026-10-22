@@ -8,6 +8,8 @@ const { renderToStaticMarkup } = require('react-dom/server');
 
 const root = path.resolve(__dirname, '..');
 const serviceNames = ['DJ service', 'Uplighting', 'Digital photo booth', 'MC services', 'Custom playlists'];
+const finance = { exports: {} };
+vm.runInNewContext(ts.transpileModule(fs.readFileSync(path.join(root, 'app/booking-finance-contract.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module: finance, exports: finance.exports, Intl, Date });
 const source = fs.readFileSync(path.join(root, 'app/home.tsx'), 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
@@ -30,6 +32,7 @@ function harness() {
   let cursor = 0, tree, started = false;
   const moduleObject = { exports: {} };
   const hooks = {
+    useRef(initial) { const index = cursor++; if (!(index in slots)) slots[index] = { current: initial }; return slots[index]; },
     useState(initial) {
       const index = cursor++;
       if (!(index in slots)) slots[index] = typeof initial === 'function' ? initial() : initial;
@@ -41,6 +44,7 @@ function harness() {
     module: moduleObject, exports: moduleObject.exports,
     require(name) {
       if (name === 'react') return hooks;
+      if (name === './booking-finance-contract') return finance.exports;
       if (name === './testimonials-section') return { __esModule: true, default: () => null };
       if (name === 'next/link') throw new Error('Homepage links must keep native anchor navigation.');
       return require(name);
@@ -173,8 +177,19 @@ function harness() {
   assert.equal(home.find(node => node.type === 'input' && node.props.name === 'date').props.defaultValue, '2027-10-22', 'date retained after Back');
   assert.equal(home.find(node => node.type === 'input' && node.props.placeholder?.startsWith('Venue name')).props.value, 'Local test venue', 'venue retained after Back');
   await home.submit();
-  await home.submit();
+  const referral = () => home.find(node => node.type === 'select' && node.props['aria-label'] === 'How did you find us? (optional)');
+  assert.equal(referral().props.required, undefined, 'discovery source is optional');
+  referral().props.onChange({ target: { value: 'Other' } }); home.render();
+  const other = () => home.find(node => node.type === 'input' && node.props.maxLength === 160);
+  other().props.onChange({ target: { value: 'Community showcase' } }); home.render();
+  home.button('Back to your night').props.onClick(); home.render(); await home.submit();
+  assert.equal(other().props.value, 'Community showcase', 'optional referral survives Back');
+  referral().props.onChange({ target: { value: 'Google' } }); home.render();
+  assert.equal(elements(home.tree, node => node.type === 'input' && node.props.maxLength === 160).length, 0, 'Other field removed when no longer relevant');
+  await Promise.all([home.submit(), home.submit()]);
   const post = only(home.calls.filter(call => call.options.method === 'POST'), 'one mocked inquiry POST');
+  assert.equal(JSON.parse(post.options.body).referralSource, 'Google');
+  assert.equal(JSON.parse(post.options.body).referralOther, null, 'stale Other detail is not submitted');
   assert.deepEqual(JSON.parse(post.options.body).services, serviceNames, 'icons do not alter exact submitted service values');
   assert.match(home.html(), /Your inquiry is saved for Zach to review/, 'mocked inquiry success still works');
   assert.equal(elements(home.tree, node => node.type === 'form').length, 0, 'success replaces inquiry form');

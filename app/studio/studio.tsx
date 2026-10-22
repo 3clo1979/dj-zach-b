@@ -5,11 +5,14 @@ import { ArrowDownToLine, ArrowRight, BarChart3, CalendarDays, CalendarPlus, Che
 import TestimonialsPanel from './testimonials-panel';
 import StudioPhoto from './studio-photo';
 import BusinessSnapshot from './business-snapshot';
+import BookingFinanceDialog, { BookingFinanceSummary, financeAlreadySaved, financeDay, financeIsDirty, newFinanceDraft, type FinanceDraft, type FinanceEditor } from './booking-finance';
+import { amountInput, financeTotals, formatUsd, parseUsdAmount, type FinancialRecord } from '../booking-finance-contract';
 import EventDetailFields, { EventDetailSummary } from './event-detail-fields';
 import { type EventDetails } from '../event-details-contract';
 import { blankEntry, calendarFile, dashboard, entryDetails, formatDay, inquiryStatuses, localDay, monthDays, parseStudioHash, servicesLabel, shiftMonth, type Entry, type Inquiry } from './studio-data';
 import './studio.css';
 import './business-snapshot.css';
+import './booking-finance.css';
 
 type EventEditor = { id: string; revision: string; original: EventDetails; draft: EventDetails };
 function editorIsDirty(editor: EventEditor | null) { return !!editor && JSON.stringify(editor.original) !== JSON.stringify(editor.draft); }
@@ -34,7 +37,7 @@ async function responseData(response: Response) {
   if (response.redirected || !response.headers.get('content-type')?.includes('application/json')) throw new Error('Your Studio session may have expired. Reload Studio and sign in again.');
   const data: unknown = await response.json();
   if (!data || typeof data !== 'object') throw new Error('Could not read the Studio response.');
-  return data as { error?: string; inquiries?: Inquiry[]; events?: Entry[] };
+  return data as { error?: string; inquiries?: Inquiry[]; events?: Entry[]; financialRecords?: FinancialRecord[] };
 }
 function exportCalendar(event: Entry) {
   const url = URL.createObjectURL(new Blob([calendarFile(event)], { type: 'text/calendar;charset=utf-8' }));
@@ -52,6 +55,9 @@ export default function Studio() {
   const [pendingTestimonials, setPendingTestimonials] = useState<number | null>(null);
   const [inquiries, setInquiries] = useState<Inquiry[]>([]);
   const [events, setEvents] = useState<Entry[]>([]);
+  const [financialRecords, setFinancialRecords] = useState<FinancialRecord[]>([]);
+  const [financeEditor, setFinanceEditor] = useState<FinanceEditor | null>(null);
+  const [financeError, setFinanceError] = useState('');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
@@ -73,6 +79,7 @@ export default function Studio() {
   const content = useRef<HTMLElement | null>(null);
   const formVersion = useRef(0);
   const editorVersion = useRef(0);
+  const financeVersion = useRef(0);
   const privateEditorHeading = useRef<HTMLLegendElement | null>(null);
 
   const load = useCallback(async () => {
@@ -86,13 +93,13 @@ export default function Studio() {
       sessionInvalid = response.status === 401 || response.status === 403 || response.redirected || !response.headers.get('content-type')?.includes('application/json');
       const data = await responseData(response);
       if (!response.ok) throw new Error(data.error || 'Could not load your Studio. Try again.');
-      if (!Array.isArray(data.inquiries) || !Array.isArray(data.events)) throw new Error('Could not read your Studio data. Try again.');
+      if (!Array.isArray(data.inquiries) || !Array.isArray(data.events) || !Array.isArray(data.financialRecords)) throw new Error('Could not read your Studio data. Try again.');
       if (!mounted.current || request.signal.aborted || current !== sequence.current) return false;
-      setInquiries(data.inquiries); setEvents(data.events); setSnapshotAsOf(new Date().toISOString()); setHasLoaded(true); return { inquiries: data.inquiries, events: data.events };
+      setInquiries(data.inquiries); setEvents(data.events); setFinancialRecords(data.financialRecords); setSnapshotAsOf(new Date().toISOString()); setHasLoaded(true); return { inquiries: data.inquiries, events: data.events, financialRecords: data.financialRecords };
     } catch (cause) {
       if (!mounted.current || request.signal.aborted || current !== sequence.current) return false;
-      setInquiries([]); setEvents([]); setSnapshotAsOf(null); setHasLoaded(false);
-      if (sessionInvalid) { setPrivateEditor(null); setDraft(blankEntry); editorVersion.current++; formVersion.current++; }
+      setInquiries([]); setEvents([]); setFinancialRecords([]); setSnapshotAsOf(null); setHasLoaded(false);
+      if (sessionInvalid) { setPrivateEditor(null); setFinanceEditor(null); setFinanceError(''); setDraft(blankEntry); editorVersion.current++; financeVersion.current++; formVersion.current++; }
       setError(cause instanceof Error ? cause.message : 'Could not load your Studio. Try again.'); return false;
     } finally { if (mounted.current && current === sequence.current) setLoading(false); }
   }, []);
@@ -125,11 +132,11 @@ export default function Studio() {
   // the page needs an explicit browser warning, not silent draft loss.
   const dirtyEditor = editorIsDirty(privateEditor);
   useEffect(() => {
-    if (!dirtyEditor) return;
+    if (!dirtyEditor && (!financeIsDirty(financeEditor) || financeAlreadySaved(financeEditor, financialRecords))) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
-  }, [dirtyEditor]);
+  }, [dirtyEditor, financeEditor, financialRecords]);
 
   useEffect(() => { if (view === 'calendar' && hasLoaded) privateEditorHeading.current?.focus({ preventScroll: true }); }, [privateEditor?.id, view, hasLoaded]);
 
@@ -146,7 +153,7 @@ export default function Studio() {
       if (!mounted.current) return false;
       confirmedResponse = response.ok || (response.status >= 400 && response.status < 500);
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) { setInquiries([]); setEvents([]); setSnapshotAsOf(null); setHasLoaded(false); }
+        if (response.status === 401 || response.status === 403) { setInquiries([]); setEvents([]); setFinancialRecords([]); setSnapshotAsOf(null); setHasLoaded(false); }
         throw new Error(data.error || 'Could not save this change.');
       }
       saved = true;
@@ -155,10 +162,10 @@ export default function Studio() {
       return true;
     } catch (cause) {
       if (!mounted.current) return false;
-      if (sessionInvalid) { setPrivateEditor(null); setDraft(blankEntry); editorVersion.current++; formVersion.current++; }
+      if (sessionInvalid) { setPrivateEditor(null); setFinanceEditor(null); setFinanceError(''); setDraft(blankEntry); editorVersion.current++; financeVersion.current++; formVersion.current++; }
       // An interrupted response may follow a successful write. Never retry it automatically.
       if (!confirmedResponse) {
-        setInquiries([]); setEvents([]); setSnapshotAsOf(null); setHasLoaded(false);
+        setInquiries([]); setEvents([]); setFinancialRecords([]); setSnapshotAsOf(null); setHasLoaded(false);
         setNotice('This change may already be saved. Reload the list to check before trying again.');
       }
       setError(cause instanceof Error ? cause.message : 'Could not confirm this change. Reload the list before retrying.');
@@ -204,11 +211,85 @@ export default function Studio() {
       editorVersion.current++; setPrivateEditor(null);
     }
   }
-  async function changeInquiryStatus(inquiry: Inquiry, status: string) {
+  function openFinance(inquiry: Inquiry, mode: 'amounts' | 'payment', kind: 'payment' | 'refund' = 'payment') {
     if (inFlight.current || loading || !hasLoaded) return;
+    if (financeIsDirty(financeEditor) && !window.confirm('Discard the unsaved amount or payment draft?')) return;
+    const draft = { ...newFinanceDraft(inquiry, mode, financeDay()), kind, recordId: mode === 'payment' ? crypto.randomUUID() : '' };
+    financeVersion.current++; setError(''); setFinanceError(''); setFinanceEditor({ original: { ...draft }, draft });
+  }
+  function openVoid(inquiry: Inquiry, record: FinancialRecord) {
+    if (inFlight.current || loading || !hasLoaded) return;
+    const draft = { ...newFinanceDraft(inquiry, 'void', financeDay()), recordId: record.id, kind: record.kind, amount: amountInput(record.amountCents), paidOn: record.paidOn, method: record.method };
+    financeVersion.current++; setError(''); setFinanceError(''); setFinanceEditor({ original: { ...draft }, draft });
+  }
+  function closeFinance() {
+    if (inFlight.current || loading) return;
+    if (financeIsDirty(financeEditor) && !financeAlreadySaved(financeEditor, financialRecords) && !window.confirm('Discard this unsaved amount or payment draft?')) return;
+    financeVersion.current++; setFinanceEditor(null); setFinanceError('');
+  }
+  async function reloadFinance() {
+    if (!financeEditor || inFlight.current || loading) return;
+    const old = financeEditor.draft, original = financeEditor.original;
+    if (!window.confirm(old.mode === 'payment' || old.mode === 'void' ? 'Reload the saved totals and keep this draft for review? Nothing will be saved yet.' : 'Replace this draft with the latest saved amounts?')) return;
+    const version = ++financeVersion.current;
+    const refreshed = await load();
+    if (!refreshed || !mounted.current || version !== financeVersion.current) return;
+    const inquiry = refreshed.inquiries.find(item => item.id === old.inquiryId);
+    if (!inquiry) { setFinanceError('This inquiry is no longer available. Close this draft and refresh your desk.'); return; }
+    const event = refreshed.events.find(item => item.id === 'booking-' + inquiry.id);
+    if (old.mode === 'status' && old.status !== 'Booked' && event && event.revision !== old.bookingRevision && !window.confirm('This booking’s calendar entry changed. Saving this status will remove its latest saved private event details. Amounts and payment history remain saved. Do you want to acknowledge removing this current calendar entry when you save?')) {
+      setFinanceError('The calendar entry changed. Cancel this dialog and review the current Calendar details before changing status.'); return;
+    }
+    const draft: FinanceDraft = old.mode === 'payment' || old.mode === 'void' ? { ...old, revision: inquiry.revision } : {
+      ...old, revision: inquiry.revision, quotedAmount: amountInput(inquiry.quotedAmountCents), bookedAmount: amountInput(inquiry.bookedAmountCents),
+      amount: amountInput(old.status === 'Quote sent' ? inquiry.quotedAmountCents : inquiry.bookedAmountCents ?? inquiry.quotedAmountCents),
+      bookingRevision: old.mode === 'status' && old.status !== 'Booked' && event ? event.revision : undefined,
+    };
+    setFinanceError(''); setFinanceEditor({ original: old.mode === 'payment' || old.mode === 'void' ? { ...original, revision: inquiry.revision } : { ...draft }, draft });
+  }
+  async function saveFinance(skip = false) {
+    if (!financeEditor || inFlight.current || loading || !hasLoaded) return;
+    const d = financeEditor.draft, inquiry = inquiries.find(item => item.id === d.inquiryId);
+    if (!inquiry || inquiry.revision !== d.revision) { setFinanceError('Reload saved values and review your draft before saving.'); return; }
+    const base = { id: d.inquiryId, inquiryRevision: d.revision };
+    let payload: object;
+    if (d.mode === 'status') {
+      if (!skip && d.amount !== '' && parseUsdAmount(d.amount) === null) { setFinanceError('Enter a USD amount with up to two decimal places, from 0 to 999,999.99.'); return; }
+      payload = { action: 'status', ...base, status: d.status, ...(d.bookingRevision ? { bookingRevision: d.bookingRevision } : {}), ...(!skip && d.amount !== '' ? { amount: d.amount } : {}) };
+    } else if (d.mode === 'amounts') {
+      if ([d.quotedAmount, d.bookedAmount].some(value => value !== '' && parseUsdAmount(value) === null)) { setFinanceError('Enter valid USD amounts with up to two decimal places, or leave blank for unknown.'); return; }
+      payload = { action: 'amounts', ...base, quotedAmount: d.quotedAmount === '' ? null : d.quotedAmount, bookedAmount: d.bookedAmount === '' ? null : d.bookedAmount };
+    } else if (d.mode === 'payment') {
+      if (financialRecords.some(record => record.id === d.recordId)) { setFinanceError('This record is already saved. Close the dialog and review payment history.'); return; }
+      const cents = parseUsdAmount(d.amount);
+      if (cents === null || cents <= 0 || !d.paidOn || d.paidOn > financeDay() || !d.method) { setFinanceError('Enter an amount greater than zero, a payment method, and the date it happened (not a future date).'); return; }
+      const totals = financeTotals(financialRecords.filter(record => record.inquiryId === d.inquiryId));
+      if (d.kind === 'refund' && cents > totals.netReceivedCents) { setFinanceError('A refund cannot exceed this inquiry’s recorded net received. Check payment history first.'); return; }
+      if (d.kind === 'payment' && inquiry.bookedAmountCents !== null && totals.netReceivedCents + cents > inquiry.bookedAmountCents && !window.confirm(`This will record an overpayment of ${formatUsd(totals.netReceivedCents + cents - inquiry.bookedAmountCents)} against the agreed booking amount. Is that what your payment records show?`)) return;
+      payload = { action: 'record-payment', ...base, recordId: d.recordId, kind: d.kind, amount: d.amount, paidOn: d.paidOn, method: d.method };
+    } else {
+      if (!d.reason.trim() || /[\r\n\0]/.test(d.reason)) { setFinanceError('Enter a single-line reason so the correction remains clear in the history.'); return; }
+      payload = { action: 'void-payment', ...base, recordId: d.recordId, reason: d.reason };
+    }
+    const version = financeVersion.current;
+    setFinanceError('');
+    if (await act(payload) && version === financeVersion.current) {
+      financeVersion.current++; setFinanceEditor(null);
+      if (d.mode === 'status' && d.status !== 'Booked' && privateEditor?.id === 'booking-' + d.inquiryId) { editorVersion.current++; setPrivateEditor(null); }
+    }
+  }
+  async function changeInquiryStatus(inquiry: Inquiry, status: string) {
+    if (inFlight.current || loading || !hasLoaded || status === inquiry.status) return;
     const event = events.find(item => item.id === 'booking-' + inquiry.id);
-    if (status !== 'Booked' && event && !window.confirm('Changing this booking status removes its calendar entry and all saved private event details. Continue?')) return;
-    if (await act({ action: 'status', id: inquiry.id, status, ...(status !== 'Booked' && event ? { bookingRevision: event.revision } : {}) }) && status !== 'Booked' && privateEditor?.id === event?.id) {
+    if (status !== 'Booked' && event && !window.confirm('Changing this booking status removes its calendar entry and all saved private event details. Amounts and payment history remain saved. Continue?')) return;
+    if (status === 'Quote sent' || status === 'Booked') {
+      const draft: FinanceDraft = { ...newFinanceDraft(inquiry, 'status', financeDay()), status,
+        amount: amountInput(status === 'Quote sent' ? inquiry.quotedAmountCents : inquiry.bookedAmountCents ?? inquiry.quotedAmountCents),
+        ...(status !== 'Booked' && event ? { bookingRevision: event.revision } : {}),
+      };
+      financeVersion.current++; setError(''); setFinanceError(''); setFinanceEditor({ original: { ...draft }, draft }); return;
+    }
+    if (await act({ action: 'status', id: inquiry.id, inquiryRevision: inquiry.revision, status, ...(status !== 'Booked' && event ? { bookingRevision: event.revision } : {}) }) && status !== 'Booked' && privateEditor?.id === event?.id) {
       editorVersion.current++; setPrivateEditor(null);
     }
   }
@@ -251,8 +332,8 @@ export default function Studio() {
           <a className="deck-snapshot-link" href="#snapshot"><span><strong>Business Snapshot</strong>Inquiries, booking conversion, and what needs a follow-up. Known TEST records stay out of the numbers.</span><BarChart3 size={30} aria-hidden="true"/></a>
           <div className="deck-metrics"><a href="#calendar"><b>{count(data.upcomingBookings)}</b><span>Upcoming bookings</span><ArrowRight size={16} aria-hidden="true"/></a><a href="#calendar"><b>{count(data.publicAppearances)}</b><span>Public appearances</span><ArrowRight size={16} aria-hidden="true"/></a></div>
         </section>}
-        {view === 'snapshot' && <BusinessSnapshot inquiries={inquiries} events={events} asOf={snapshotAsOf} loading={loading} hasLoaded={hasLoaded} onReviewNew={() => setFilter('New')}/>}
-        {view === 'bookings' && <section aria-label="Booking inquiries" aria-busy={loading || busy}><div className="studio-section-toolbar"><label>Status<select value={filter} onChange={event => setFilter(event.target.value)}><option>All</option>{inquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></label><p>{known ? `${visibleInquiries.length} ${visibleInquiries.length === 1 ? 'inquiry' : 'inquiries'}` : 'Checking inquiries…'}</p></div>{loading ? <p className="studio-empty" role="status">Loading your Booking Desk…</p> : !hasLoaded ? <p className="studio-empty">Inquiries are unavailable. Reload your desk before making changes.</p> : !visibleInquiries.length ? <div className="studio-empty"><Inbox size={30} aria-hidden="true"/><h2>{filter === 'All' ? 'A fresh start.' : `No ${filter.toLowerCase()} inquiries.`}</h2><p>{filter === 'All' ? 'Requests from the website will appear here. Nothing to chase just yet.' : 'Choose another status to see the rest of your Booking Desk.'}</p></div> : visibleInquiries.map(inquiry => <article className="studio-record" key={inquiry.id}><div className="record-header"><div><small>{inquiry.eventType} · {formatDay(inquiry.date)}</small><h3>{inquiry.name}</h3><p>{inquiry.venue}</p></div><span className={'studio-pill ' + (inquiry.status === 'New' ? 'gold' : '')}>{inquiry.status}</span></div><div className="record-detail"><p>{servicesLabel(inquiry.services)}</p><p>{[inquiry.guests && inquiry.guests + ' guests', inquiry.hours].filter(Boolean).join(' · ')}</p><p>{inquiry.message || 'No additional notes.'}</p><small>Received {new Date(inquiry.createdAt).toLocaleString()}</small></div><div className="record-actions"><a href={'mailto:' + encodeURIComponent(inquiry.email)}>Email {inquiry.email}</a><a href={'tel:' + inquiry.phone}>Call {inquiry.phone}</a><label>Update status<select aria-label={'Status for ' + inquiry.name} disabled={busy || loading} value={inquiry.status} onChange={event => void changeInquiryStatus(inquiry, event.target.value)}>{inquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></label></div></article>)}</section>}
+        {view === 'snapshot' && <BusinessSnapshot inquiries={inquiries} events={events} financialRecords={financialRecords} asOf={snapshotAsOf} loading={loading} hasLoaded={hasLoaded} onReviewNew={() => setFilter('New')}/>}
+        {view === 'bookings' && <section aria-label="Booking inquiries" aria-busy={loading || busy}><div className="studio-section-toolbar"><label>Status<select value={filter} onChange={event => setFilter(event.target.value)}><option>All</option>{inquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></label><p>{known ? `${visibleInquiries.length} ${visibleInquiries.length === 1 ? 'inquiry' : 'inquiries'}` : 'Checking inquiries…'}</p></div>{loading ? <p className="studio-empty" role="status">Loading your Booking Desk…</p> : !hasLoaded ? <p className="studio-empty">Inquiries are unavailable. Reload your desk before making changes.</p> : !visibleInquiries.length ? <div className="studio-empty"><Inbox size={30} aria-hidden="true"/><h2>{filter === 'All' ? 'A fresh start.' : `No ${filter.toLowerCase()} inquiries.`}</h2><p>{filter === 'All' ? 'Requests from the website will appear here. Nothing to chase just yet.' : 'Choose another status to see the rest of your Booking Desk.'}</p></div> : visibleInquiries.map(inquiry => <article className="studio-record" key={inquiry.id}><div className="record-header"><div><small>{inquiry.eventType} · {formatDay(inquiry.date)}</small><h3>{inquiry.name}</h3><p>{inquiry.venue}</p></div><span className={'studio-pill ' + (inquiry.status === 'New' ? 'gold' : '')}>{inquiry.status}</span></div><div className="record-detail"><p>{servicesLabel(inquiry.services)}</p><p>{[inquiry.guests && inquiry.guests + ' guests', inquiry.hours].filter(Boolean).join(' · ')}</p><p>{inquiry.message || 'No additional notes.'}</p><small>Received {new Date(inquiry.createdAt).toLocaleString()}</small><p className="booking-referral">Discovery source: {inquiry.referralSource || 'Not provided'}{inquiry.referralSource === 'Other' && inquiry.referralOther ? ' · ' + inquiry.referralOther : ''}</p></div><BookingFinanceSummary inquiry={inquiry} records={financialRecords.filter(record => record.inquiryId === inquiry.id)} disabled={busy || loading} onOpen={(mode, kind) => openFinance(inquiry, mode, kind)} onVoid={record => openVoid(inquiry, record)}/><div className="record-actions"><a href={'mailto:' + encodeURIComponent(inquiry.email)}>Email {inquiry.email}</a><a href={'tel:' + inquiry.phone}>Call {inquiry.phone}</a><label>Update status<select aria-label={'Status for ' + inquiry.name} disabled={busy || loading} value={inquiry.status} onChange={event => void changeInquiryStatus(inquiry, event.target.value)}>{inquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></label></div></article>)}</section>}
         {view === 'calendar' && <section aria-label="Studio calendar" aria-busy={loading || busy}>
           <div className="studio-section-toolbar"><p>Saved dates only · check your phone before confirming.</p><a className="studio-button gold" href="#add-date" onClick={() => addDate(selectedDay || undefined)}><Plus size={17} aria-hidden="true"/>Add a date</a></div>
           {month && <div className="studio-calendar deck-card"><div className="calendar-heading"><h2>{formatDay(month, { month: 'long', year: 'numeric' })}</h2><div><button className="studio-icon-button" type="button" aria-label="Previous month" onClick={() => { setMonth(shiftMonth(month, -1)); clearCalendarSelection(); }}><ChevronLeft size={20} aria-hidden="true"/></button><button type="button" className="calendar-today" onClick={() => { setMonth(today.slice(0, 7) + '-01'); selectCalendarDay(today); }}>Today</button><button className="studio-icon-button" type="button" aria-label="Next month" onClick={() => { setMonth(shiftMonth(month, 1)); clearCalendarSelection(); }}><ChevronRight size={20} aria-hidden="true"/></button></div></div><div className="calendar-weekdays" aria-hidden="true">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => <span key={day}>{day}</span>)}</div><div className="calendar-grid" aria-label="Choose a date">{monthDays(month).map(day => { const event = known ? events.find(entry => entry.date === day) : undefined; return <button type="button" key={day} className={(day.slice(0, 7) !== month.slice(0, 7) ? 'outside ' : '') + (event ? 'has-event ' : '') + (day === today ? 'is-today' : '')} aria-pressed={selectedDay === day} aria-label={formatDay(day, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }) + (event ? ', ' + event.title + ', ' + event.type : known ? ', no saved entry' : ', schedule not loaded')} onClick={() => selectCalendarDay(day)}><span>{Number(day.slice(-2))}</span>{event && <><i className={event.type === 'Blocked date' ? 'blocked' : event.isPublic ? 'public' : 'private'} aria-hidden="true"/><small>{event.title}</small></>}</button>; })}</div><p className="calendar-legend"><span><i className="private"/>Private</span><span><i className="public"/>Public</span><span><i className="blocked"/>Blocked</span></p></div>}
@@ -277,6 +358,7 @@ export default function Studio() {
         <div className="studio-footer-note"><LockKeyhole size={13} aria-hidden="true"/><span>Private Studio · Your inquiries, dates, and client stories.</span></div>
       </main>
     </div>
+    {known && financeEditor && <BookingFinanceDialog editor={financeEditor} inquiry={inquiries.find(item => item.id === financeEditor.draft.inquiryId)} busy={busy} stale={inquiries.find(item => item.id === financeEditor.draft.inquiryId)?.revision !== financeEditor.draft.revision} alreadySaved={financeAlreadySaved(financeEditor, financialRecords)} today={financeDay()} error={financeError || error} onChange={draft => { if (inFlight.current || loading) return; financeVersion.current++; setError(''); setFinanceError(''); setFinanceEditor({ ...financeEditor, draft }); }} onClose={closeFinance} onReload={() => void reloadFinance()} onSave={skip => void saveFinance(skip)}/>}
     <nav className="studio-bottom-nav" aria-label="Studio mobile">{navLinks(true)}</nav>
   </div>;
 }

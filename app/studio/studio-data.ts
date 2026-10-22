@@ -1,6 +1,6 @@
 import { blankEventDetails, contactLine, inquiryServicePlan, type EventDetails } from '../event-details-contract';
 
-export type Inquiry = { id: string; name: string; email: string; phone: string; date: string; venue: string; eventType: string; guests: string; hours: string; services: string; message: string; status: string; createdAt: string };
+export type Inquiry = { id: string; name: string; email: string; phone: string; date: string; venue: string; eventType: string; guests: string; hours: string; services: string; message: string; status: string; createdAt: string; referralSource: string | null; referralOther: string | null; quotedAmountCents: number | null; bookedAmountCents: number | null; revision: string };
 export type Entry = { id: string; title: string; date: string; start: string; end: string; venue: string; type: string; isPublic: boolean; facebook: string; notes: string; servicePlan: string | null; contactName: string | null; contactEmail: string | null; contactPhone: string | null; revision: string };
 export const inquiryStatuses = ['New', 'Contacted', 'Quote sent', 'Booked', 'Declined', 'Canceled'];
 export const blankEntry = { title: '', date: '', start: '', end: '', venue: '', type: 'Public appearance', isPublic: false, facebook: '', ...blankEventDetails };

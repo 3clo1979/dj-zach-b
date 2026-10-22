@@ -1,7 +1,13 @@
 import type { Entry, Inquiry } from './studio-data';
+import { MAX_AMOUNT_CENTS, referralSources, type FinancialRecord } from '../booking-finance-contract';
 
 export const BUSINESS_TIME_ZONE = 'America/New_York';
 
+// Only the non-identifying ledger fields needed by this aggregate projection.
+// The full authenticated response may contain audit actors/reasons; never copy
+// those into the Snapshot result or chart labels.
+export type SnapshotFinancialRecord = Pick<FinancialRecord, 'id' | 'inquiryId' | 'kind' | 'amountCents' | 'paidOn' | 'voidedAt'>;
+export type RecordedTotals = { paymentsCents: number; refundsCents: number; netCents: number; paymentCount: number; refundCount: number };
 export type InquiryCohort = { inquiries: number; booked: number; conversionRate: number | null };
 export type BusinessSnapshot = {
   windows: { today: string; currentStart: string; currentEnd: string; priorStart: string; priorEnd: string };
@@ -10,6 +16,13 @@ export type BusinessSnapshot = {
   trend: { month: string; inquiries: number; partial: boolean }[];
   followUps: { newInquiries: number; agedSevenDays: number; oldestAgeDays: number | null; unknownAgeCount: number };
   upcomingBookings: { total: number; linked: number; manual: number };
+  bookedValue: { total: number; known: number; unknown: number; amountCents: number | null; invalidAmountCount: number };
+  recorded: {
+    current: RecordedTotals; prior: RecordedTotals; allTime: RecordedTotals;
+    excludedTestCount: number; voidedCount: number; orphanCount: number;
+    invalidCount: number; futureCount: number; duplicateCount: number;
+  };
+  discovery: { sources: { source: string; count: number }[]; known: number; unknown: number; total: number };
   excludedInquiryCount: number;
   excludedEventCount: number;
   invalidCreatedAtCount: number;
@@ -74,9 +87,10 @@ function cohort(rows: { inquiry: Inquiry; day: string }[], start: string, end: s
  * Read-only, aggregate-only projection of the existing authenticated Studio load.
  * Periods use 30 complete New York calendar days, not 30 * 24 elapsed hours.
  * Booked means the CURRENT status of inquiries CREATED in the stated cohort;
- * there is no booked-at timestamp/status history from which to infer new sales.
+ * confirmation dates are not inferred from status or migration dates. Financial
+ * periods instead use the manually entered payment/refund calendar date.
  */
-export function businessSnapshot(inquiries: readonly Inquiry[], events: readonly Entry[], now: Date): BusinessSnapshot {
+export function businessSnapshot(inquiries: readonly Inquiry[], events: readonly Entry[], now: Date, financialRecords: readonly SnapshotFinancialRecord[] = []): BusinessSnapshot {
   if (!Number.isFinite(now.getTime())) throw new RangeError('Snapshot requires a valid refresh time.');
   const today = businessDay(now);
   const windows = { today, currentStart: shiftDay(today, -30), currentEnd: shiftDay(today, -1), priorStart: shiftDay(today, -60), priorEnd: shiftDay(today, -31) };
@@ -119,11 +133,55 @@ export function businessSnapshot(inquiries: readonly Inquiry[], events: readonly
     if (/^booking-.+/.test(event.id)) upcomingBookings.linked++;
     else upcomingBookings.manual++;
   }
+  const bookedValue: BusinessSnapshot['bookedValue'] = { total: 0, known: 0, unknown: 0, amountCents: null, invalidAmountCount: 0 };
+  for (const inquiry of realInquiries) {
+    if (inquiry.status !== 'Booked') continue;
+    bookedValue.total++;
+    const amount = inquiry.bookedAmountCents;
+    if (amount === null || amount === undefined) bookedValue.unknown++;
+    else if (!Number.isSafeInteger(amount) || amount < 0 || amount > MAX_AMOUNT_CENTS) { bookedValue.unknown++; bookedValue.invalidAmountCount++; }
+    else { bookedValue.known++; bookedValue.amountCents = (bookedValue.amountCents ?? 0) + amount; }
+  }
+
+  const emptyTotals = (): RecordedTotals => ({ paymentsCents: 0, refundsCents: 0, netCents: 0, paymentCount: 0, refundCount: 0 });
+  const recorded: BusinessSnapshot['recorded'] = {
+    current: emptyTotals(), prior: emptyTotals(), allTime: emptyTotals(),
+    excludedTestCount: 0, voidedCount: 0, orphanCount: 0, invalidCount: 0, futureCount: 0, duplicateCount: 0,
+  };
+  const inquiryIds = new Set(realInquiries.map(inquiry => inquiry.id));
+  const ledgerIds = new Set<string>();
+  const addRecord = (totals: RecordedTotals, record: SnapshotFinancialRecord) => {
+    if (record.kind === 'payment') { totals.paymentsCents += record.amountCents; totals.paymentCount++; }
+    else { totals.refundsCents += record.amountCents; totals.refundCount++; }
+    totals.netCents = totals.paymentsCents - totals.refundsCents;
+  };
+  for (const record of financialRecords) {
+    if (testInquiryIds.has(record.inquiryId)) { recorded.excludedTestCount++; continue; }
+    if (!inquiryIds.has(record.inquiryId)) { recorded.orphanCount++; continue; }
+    if (!record.id || ledgerIds.has(record.id)) { recorded.duplicateCount++; continue; }
+    ledgerIds.add(record.id);
+    if (record.voidedAt != null) { recorded.voidedCount++; continue; }
+    if ((record.kind !== 'payment' && record.kind !== 'refund') || !Number.isSafeInteger(record.amountCents) || record.amountCents <= 0 || record.amountCents > MAX_AMOUNT_CENTS || !validCalendarDay(record.paidOn)) { recorded.invalidCount++; continue; }
+    if (record.paidOn > today) { recorded.futureCount++; continue; }
+    // Canceled/rebooked inquiries keep the same ledger. Current status, received
+    // timestamp and event deletion do not erase or re-date recorded money.
+    addRecord(recorded.allTime, record);
+    if (record.paidOn >= windows.currentStart && record.paidOn <= windows.currentEnd) addRecord(recorded.current, record);
+    if (record.paidOn >= windows.priorStart && record.paidOn <= windows.priorEnd) addRecord(recorded.prior, record);
+  }
+  const sources = referralSources.map(source => ({ source, count: 0 }));
+  const discovery: BusinessSnapshot['discovery'] = { sources, known: 0, unknown: 0, total: 0 };
+  for (const row of dated) {
+    if (row.day < windows.currentStart || row.day > windows.currentEnd) continue;
+    discovery.total++;
+    const source = sources.find(item => item.source === row.inquiry.referralSource);
+    if (source) { source.count++; discovery.known++; } else discovery.unknown++;
+  }
   return {
     windows,
     current: cohort(dated, windows.currentStart, windows.currentEnd),
     prior: cohort(dated, windows.priorStart, windows.priorEnd),
-    trend, followUps, upcomingBookings,
+    trend, followUps, upcomingBookings, bookedValue, recorded, discovery,
     excludedInquiryCount: inquiries.length - realInquiries.length,
     excludedEventCount: events.length - realEvents.length,
     invalidCreatedAtCount, futureCreatedAtCount, invalidEventDateCount,

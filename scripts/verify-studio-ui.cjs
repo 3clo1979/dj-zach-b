@@ -2,6 +2,9 @@
 const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict'), ts = require('typescript');
 const { renderToStaticMarkup } = require('react-dom/server');
 function transpile(file) { return ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText; }
+const financeContractModule = { exports: {} };
+vm.runInNewContext(transpile('app/booking-finance-contract.ts'), { module: financeContractModule, exports: financeContractModule.exports, Intl, Date });
+const financeContract = financeContractModule.exports;
 const contractModule = { exports: {} };
 vm.runInNewContext(transpile('app/event-details-contract.ts'), { module: contractModule, exports: contractModule.exports });
 const contract = contractModule.exports;
@@ -12,19 +15,22 @@ const fieldsModule = { exports: {} };
 vm.runInNewContext(transpile('app/studio/event-detail-fields.tsx'), { module: fieldsModule, exports: fieldsModule.exports, require: name => name === '../event-details-contract' ? contract : name === './studio-data' ? data : require(name) });
 const fields = fieldsModule.exports;
 const snapshotDataModule = { exports: {} };
-vm.runInNewContext(transpile('app/studio/business-snapshot-data.ts'), { module: snapshotDataModule, exports: snapshotDataModule.exports, Date, Intl });
+vm.runInNewContext(transpile('app/studio/business-snapshot-data.ts'), { module: snapshotDataModule, exports: snapshotDataModule.exports, Date, Intl, require: name => name === '../booking-finance-contract' ? financeContract : require(name) });
 const snapshotModule = { exports: {} };
-vm.runInNewContext(transpile('app/studio/business-snapshot.tsx'), { module: snapshotModule, exports: snapshotModule.exports, Date, Intl, require: name => name === './business-snapshot-data' ? snapshotDataModule.exports : name.endsWith('.css') ? {} : require(name) });
+vm.runInNewContext(transpile('app/studio/business-snapshot.tsx'), { module: snapshotModule, exports: snapshotModule.exports, Date, Intl, require: name => name === './business-snapshot-data' ? snapshotDataModule.exports : name === '../booking-finance-contract' ? financeContract : name.endsWith('.css') ? {} : require(name) });
 const Snapshot = snapshotModule.exports.default;
+const financeModule = { exports: {} };
+vm.runInNewContext(transpile('app/studio/booking-finance.tsx'), { module: financeModule, exports: financeModule.exports, document: {}, Date, Intl, require: name => name === '../booking-finance-contract' ? financeContract : name === './studio-data' ? data : require(name) });
+const FinanceDialog = financeModule.exports.default, FinanceSummary = financeModule.exports.BookingFinanceSummary;
 const text = node => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' ? text(node.props?.children) : node == null || typeof node === 'boolean' ? '' : String(node);
 const elements = (node, test) => Array.isArray(node) ? node.flatMap(child => elements(child, test)) : !node || typeof node !== 'object' || !node.props ? [] : [...(test(node) ? [node] : []), ...elements(node.props.children, test)];
 const today = data.localDay();
-const fixtureInquiry = { id: 'test-inquiry', name: 'Local <script>name</script>', email: 'qa@example.invalid', phone: '5550100', date: data.addDays(today, 3), venue: 'Local test venue', eventType: 'Wedding', guests: '80', hours: '5–11 PM', services: '["DJ service"]', message: 'Original local test message.', status: 'New', createdAt: new Date().toISOString() };
+const fixtureInquiry = { id: 'test-inquiry', name: 'Local <script>name</script>', email: 'qa@example.invalid', phone: '5550100', date: data.addDays(today, 3), venue: 'Local test venue', eventType: 'Wedding', guests: '80', hours: '5–11 PM', services: '["DJ service"]', message: 'Original local test message.', status: 'New', createdAt: new Date().toISOString(), revision: 'legacy', referralSource: null, referralOther: null, quotedAmountCents: null, bookedAmountCents: null };
 const fixtureEvent = { id: 'test-event', title: 'Local test event', date: data.addDays(today, 2), start: '18:00', end: '23:00', venue: 'Test venue', type: 'Private booking', isPublic: false, facebook: '', notes: 'Private fixture notes', servicePlan: null, contactName: null, contactEmail: null, contactPhone: null, revision: 'fixture-1' };
 function harness() {
   const slots = [], effects = [], listeners = new Map(), calls = [], confirmations = [];
   let cursor = 0, tree, dirty = false, hash = '', confirmed = true, getFailure = '', postFailure = '', postGate = null;
-  let inquiries = [{ ...fixtureInquiry }], events = [{ ...fixtureEvent }];
+  let inquiries = [{ ...fixtureInquiry }], events = [{ ...fixtureEvent }], financialRecords = [];
   function changed(a, b) { return !a || !b || a.length !== b.length || a.some((item, index) => item !== b[index]); }
   const hooks = {
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === 'function' ? initial() : initial; return [slots[i], value => { const next = typeof value === 'function' ? value(slots[i]) : value; if (next !== slots[i]) { slots[i] = next; dirty = true; } }]; },
@@ -38,14 +44,14 @@ function harness() {
   const mod = { exports: {} };
   vm.runInNewContext(transpile('app/studio/studio.tsx'), {
     module: mod, exports: mod.exports,
-    require(name) { if (name === 'react') return hooks; if (name === './studio-data') return data; if (name === './business-snapshot') return snapshotModule.exports; if (name === './event-detail-fields') return fields; if (name === './testimonials-panel') return { __esModule: true, default: Panel }; if (name === './studio-photo') return { __esModule: true, default: Photo }; if (name.endsWith('.css')) return {}; if (name === 'next/link') throw new Error('Studio must use native anchors.'); return require(name); },
+    require(name) { if (name === 'react') return hooks; if (name === './studio-data') return data; if (name === '../booking-finance-contract') return financeContract; if (name === './booking-finance') return financeModule.exports; if (name === './business-snapshot') return snapshotModule.exports; if (name === './event-detail-fields') return fields; if (name === './testimonials-panel') return { __esModule: true, default: Panel }; if (name === './studio-photo') return { __esModule: true, default: Photo }; if (name.endsWith('.css')) return {}; if (name === 'next/link') throw new Error('Studio must use native anchors.'); return require(name); },
     fetch: async (url, options = {}) => {
       calls.push({ url, options }); assert.equal(url, '/api/manage');
       if (!options.method) {
         if (getFailure === '403') return Response.json({ error: 'Manager sign-in required.' }, { status: 403 });
         if (getFailure === 'html') return new Response('<html>sign in</html>', { headers: { 'Content-Type': 'text/html' } });
         if (getFailure === 'network') throw new TypeError('Local test interruption');
-        return Response.json({ inquiries, events });
+        return Response.json({ inquiries, events, financialRecords, statusHistory: [] });
       }
       if (postGate) await postGate;
       if (postFailure === 'malformed') return new Response('{', { headers: { 'Content-Type': 'application/json' } });
@@ -53,13 +59,19 @@ function harness() {
       if (postFailure === '403') return Response.json({ error: 'Manager sign-in required.' }, { status: 403 });
       if (postFailure === '409') return Response.json({ error: 'Date already occupied.' }, { status: 409 });
       const body = JSON.parse(options.body);
-      if (body.action === 'status') { inquiries = inquiries.map(inquiry => inquiry.id === body.id ? { ...inquiry, status: body.status } : inquiry); }
+      if (body.action === 'status') { inquiries = inquiries.map(inquiry => inquiry.id === body.id ? { ...inquiry, status: body.status, revision: 'saved-' + calls.length, ...(body.amount !== undefined ? { [body.status === 'Quote sent' ? 'quotedAmountCents' : 'bookedAmountCents']: body.amount === null ? null : financeContract.parseUsdAmount(body.amount) } : {}) } : inquiry); }
+      if (body.action === 'amounts') inquiries = inquiries.map(inquiry => inquiry.id === body.id ? { ...inquiry, quotedAmountCents: body.quotedAmount === null ? null : financeContract.parseUsdAmount(body.quotedAmount), bookedAmountCents: body.bookedAmount === null ? null : financeContract.parseUsdAmount(body.bookedAmount), revision: 'saved-' + calls.length } : inquiry);
+      if (body.action === 'record-payment') {
+        if (!financialRecords.some(record => record.id === body.recordId)) { financialRecords.push({ id: body.recordId, inquiryId: body.id, kind: body.kind, amountCents: financeContract.parseUsdAmount(body.amount), paidOn: body.paidOn, method: body.method, createdAt: new Date().toISOString(), createdBy: 'manager@example.test', voidedAt: null, voidedBy: null, voidReason: null }); inquiries = inquiries.map(inquiry => inquiry.id === body.id ? { ...inquiry, revision: 'saved-' + calls.length } : inquiry); }
+      }
+      if (body.action === 'void-payment') { financialRecords = financialRecords.map(record => record.id === body.recordId ? { ...record, voidedAt: new Date().toISOString(), voidedBy: 'manager@example.test', voidReason: body.reason } : record); inquiries = inquiries.map(inquiry => inquiry.id === body.id ? { ...inquiry, revision: 'saved-' + calls.length } : inquiry); }
       if (body.action === 'delete-event') events = events.filter(event => event.id !== body.id);
       if (body.action === 'event') events.push({ id: 'local-added', revision: 'new-event-revision', ...body });
       if (body.action === 'update-event-details') { const row = events.find(event => event.id === body.id); if (!row) return Response.json({ error: 'Entry not found.' }, { status: 404 }); if (row.revision !== body.revision) return Response.json({ error: 'These details changed. Reload before saving.' }, { status: 409 }); const { action, id, revision, ...details } = body; events = events.map(event => event.id === id ? { ...event, ...details, revision: 'saved-' + calls.length } : event); }
+      if (postFailure === 'saved-network') throw new TypeError('Response lost after local fixture save');
       return Response.json({ ok: true });
     },
-    window: { ...browser, scrollTo() {} }, document: { createElement: () => ({ click() {} }) }, URL, URLSearchParams, Blob, Response, Date, Error, TypeError, Array, JSON, Number, String, AbortController, setTimeout, clearTimeout, setInterval: () => 1, clearInterval: () => {},
+    window: { ...browser, scrollTo() {} }, document: { createElement: () => ({ click() {} }) }, URL, URLSearchParams, Blob, Response, Date, Intl, crypto, Error, TypeError, Array, JSON, Number, String, AbortController, setTimeout, clearTimeout, setInterval: () => 1, clearInterval: () => {},
   });
   function render() { cursor = 0; dirty = false; tree = mod.exports.default(); effects.splice(0).forEach(effect => effect()); return tree; }
   async function settle() { for (let i = 0; i < 5; i++) { if (dirty || !tree) render(); await new Promise(resolve => setTimeout(resolve, 8)); } if (dirty) render(); }
@@ -67,9 +79,10 @@ function harness() {
   const button = label => find(node => node.type === 'button' && (text(node) === label || node.props['aria-label'] === label));
   const countPosts = () => calls.filter(call => call.options.method === 'POST').length;
   render();
-  return { render, settle, calls, confirmations, find, button, navigate, countPosts, changeDetail(name, value) { const field = find(node => node.type === fields.default); field.props.onChange({ ...field.props.value, [name]: value }); }, detail(name) { return find(node => node.type === fields.default).props.value[name]; }, beforeUnload() { let prevented = false; listeners.get('beforeunload')?.forEach(fn => fn({ preventDefault() { prevented = true; }, returnValue: undefined })); return prevented; }, get tree() { return tree; }, html: () => renderToStaticMarkup(tree), getHash: () => hash, setConfirmed(value) { confirmed = value; }, setGetFailure(value) { getFailure = value; }, setPostFailure(value) { postFailure = value; }, setRows(q, e) { inquiries = q; events = e; }, holdPosts() { let release; postGate = new Promise(resolve => { release = resolve; }); return () => { postGate = null; release(); }; }, setPending(value) { find(node => node.type === Panel).props.onPendingCountChange(value); }, close() { for (const slot of slots) slot?.cleanup?.(); }, clickAnchor(href) { const matches = elements(tree, node => node.type === 'a' && node.props.href === href); assert(matches.length); matches[0].props.onClick?.(); navigate(href); }, changeStatus(status) { find(node => node.type === 'select' && node.props['aria-label'] === 'Status for ' + fixtureInquiry.name).props.onChange({ target: { value: status } }); } };
+  return { render, settle, calls, confirmations, find, button, navigate, countPosts, changeDetail(name, value) { const field = find(node => node.type === fields.default); field.props.onChange({ ...field.props.value, [name]: value }); }, detail(name) { return find(node => node.type === fields.default).props.value[name]; }, beforeUnload() { let prevented = false; listeners.get('beforeunload')?.forEach(fn => fn({ preventDefault() { prevented = true; }, returnValue: undefined })); return prevented; }, get tree() { return tree; }, html: () => renderToStaticMarkup(tree), getHash: () => hash, setConfirmed(value) { confirmed = value; }, setGetFailure(value) { getFailure = value; }, setPostFailure(value) { postFailure = value; }, setRows(q, e, f = []) { inquiries = q; events = e; financialRecords = f; }, getRows() { return { inquiries, events, financialRecords }; }, holdPosts() { let release; postGate = new Promise(resolve => { release = resolve; }); return () => { postGate = null; release(); }; }, setPending(value) { find(node => node.type === Panel).props.onPendingCountChange(value); }, close() { for (const slot of slots) slot?.cleanup?.(); }, clickAnchor(href) { const matches = elements(tree, node => node.type === 'a' && node.props.href === href); assert(matches.length); matches[0].props.onClick?.(); navigate(href); }, changeStatus(status) { find(node => node.type === 'select' && node.props['aria-label'] === 'Status for ' + fixtureInquiry.name).props.onChange({ target: { value: status } }); } };
 }
-(async () => {
+module.exports = { harness, elements, text, FinanceDialog, FinanceSummary, financeContract, fixtureInquiry, fixtureEvent, data };
+if (require.main === module) (async () => {
   const h = harness(); assert.match(h.html(), /Finding your next date/); assert.match(h.html(), /— new inquiries/, 'not false zero while loading'); await h.settle(); h.setPending(2); await h.settle();
   assert.match(h.html(), /2 testimonials waiting/); assert.match(h.html(), /1 new inquiry/); assert.match(h.html(), /Local test event/); assert.doesNotMatch(h.html(), /Sample Event|Event checklist ready/);
   h.clickAnchor('#snapshot'); await h.settle(); assert.match(h.html(), /Last 30 complete days/); assert.match(h.html(), /Website visits &amp; daily average/); assert.match(h.html(), /Not connected/); assert.doesNotMatch(h.html(), /qa@example.invalid|Private fixture notes|&lt;script&gt;name/);
@@ -92,7 +105,7 @@ function harness() {
   let prevented = false; h.find(node => node.type === 'a' && node.props.className === 'studio-skip').props.onClick({ preventDefault() { prevented = true; } }); assert(prevented); assert.equal(h.getHash(), '#bookings', 'skip link does not route back to Deck');
   h.navigate('#voices'); await h.settle(); const container = h.find(node => node.type === 'div' && elements(node.props.children, child => typeof child.type === 'function' && child.type.name === 'Panel').length === 1 && node.props.hidden !== undefined); assert.equal(container.props.hidden, false);
   h.navigate('#settings'); await h.settle(); assert.match(h.html(), /What your desk does today/); assert.match(h.html(), /Yahoo \/ phone sync is not connected/);
-  h.navigate('#bookings'); await h.settle(); h.setPostFailure('malformed'); h.changeStatus('Booked'); await h.settle(); assert.match(h.html(), /may already be saved/); assert.doesNotMatch(h.html(), /qa@example.invalid/, 'unconfirmed malformed success clears private controls');
+  h.navigate('#bookings'); await h.settle(); h.setPostFailure('malformed'); h.changeStatus('Booked'); await h.settle(); h.find(node => node.type === FinanceDialog).props.onSave(true); await h.settle(); assert.match(h.html(), /may already be saved/); assert.doesNotMatch(h.html(), /qa@example.invalid/, 'unconfirmed malformed success clears private controls');
   h.setPostFailure(''); h.button('Refresh desk').props.onClick(); await h.settle(); assert.match(h.html(), /qa@example.invalid/);
   h.navigate('#snapshot'); await h.settle(); h.setGetFailure('403'); h.button('Refresh desk').props.onClick(); await h.settle(); assert.doesNotMatch(h.html(), /qa@example.invalid/); assert.match(h.html(), /Manager sign-in required/); assert.match(h.html(), /Your snapshot is unavailable/); assert.doesNotMatch(h.html(), /snapshot-metric/); h.navigate('#deck'); await h.settle(); assert.match(h.html(), /— new inquiries/); assert.doesNotMatch(h.html(), /Local test event/);
   h.setGetFailure(''); h.setRows([], []); h.button('Refresh desk').props.onClick(); await h.settle(); assert.match(h.html(), /Your next good night awaits/); assert.match(h.html(), /No saved events or blocked dates/);

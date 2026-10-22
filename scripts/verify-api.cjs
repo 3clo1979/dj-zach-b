@@ -30,7 +30,7 @@ function moduleFor(file) {
       if (name.startsWith('.')) return moduleFor(path.resolve(path.dirname(resolved), name) + '.ts');
       return require(name);
     },
-    Response, Request, URL, crypto, Date: TestDate, JSON, Number, String, Array, Object, console, SyntaxError,
+    Response, Request, URL, crypto, TextDecoder, Uint8Array, Date: TestDate, JSON, Number, String, Array, Object, console, SyntaxError,
   }, { filename: file });
   return module.exports;
 }
@@ -58,7 +58,7 @@ db = drizzle(binding, { schema });
 const lead = moduleFor('app/api/inquiries/route.ts'), manage = moduleFor('app/api/manage/route.ts'), pub = moduleFor('app/api/events/route.ts');
 const contract = moduleFor('app/event-details-contract.ts');
 const req = (body, origin = 'https://test.local') => new Request('https://test.local/api/manage', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin }, body: JSON.stringify(body) });
-const post = body => manage.POST(req(body));
+const post = body => manage.POST(req(body.action === 'status' ? { inquiryRevision: sqlite.prepare('SELECT revision FROM inquiries WHERE id = ?').get(body.id)?.revision ?? 'legacy', ...body } : body));
 const row = id => sqlite.prepare('SELECT * FROM events WHERE id = ?').get(id);
 const inquiry = id => sqlite.prepare('SELECT * FROM inquiries WHERE id = ?').get(id);
 const details = { servicePlan: 'DJ + uplighting\nBring two microphones', contactName: 'Local planner', contactEmail: 'local@example.invalid', contactPhone: '+1 (440) 555-0100 ext 2', notes: '  Keep this exact wording.\nBack entrance.  ' };
@@ -68,8 +68,8 @@ async function group(label, fn) { await fn(); groups++; console.log('✓ API: ' 
 (async () => {
   await group('additive migration preserves legacy records and creates NULL/private defaults', async () => {
     const migrations = fs.readdirSync('drizzle').filter(name => name.endsWith('.sql')).sort();
-    assert.equal(migrations.at(-1), '0004_private_event_details.sql');
-    for (const file of migrations.slice(0, -1)) sqlite.exec(fs.readFileSync('drizzle/' + file, 'utf8'));
+    assert.equal(migrations.at(-1), '0005_booking_finances.sql');
+    for (const file of migrations.filter(name => name < '0004')) sqlite.exec(fs.readFileSync('drizzle/' + file, 'utf8'));
     sqlite.prepare("INSERT INTO events(id,title,date,start,end,venue,type,notes) VALUES(?,?,?,?,?,?,?,?)").run('legacy', 'Local old booking', '2027-01-02', '', '', '', 'Private booking', 'Legacy notes\nUnchanged');
     sqlite.exec(fs.readFileSync('drizzle/0004_private_event_details.sql', 'utf8'));
     const legacy = row('legacy');
@@ -82,6 +82,7 @@ async function group(label, fn) { await fn(); groups++; console.log('✓ API: ' 
     assert.equal(snapshot.prevId, oldSnapshot.id); assert.equal(snapshot.tables.events.columns.revision.type, 'text');
     assert.equal(snapshot.tables.events.columns.revision.default, "'legacy'");
     sqlite.prepare('DELETE FROM events WHERE id = ?').run('legacy');
+    sqlite.exec(fs.readFileSync('drizzle/0005_booking_finances.sql', 'utf8'));
   });
   await group('guards reject anonymous and cross-origin reads/writes before database access', async () => {
     const before = databaseReads;
@@ -181,7 +182,7 @@ async function group(label, fn) { await fn(); groups++; console.log('✓ API: ' 
     const event = row(linked);
     assert.equal((await post({ action: 'status', id, status: 'Canceled', bookingRevision: event.revision })).status, 200);
     beforeBatch = () => {
-      sqlite.prepare('UPDATE inquiries SET status=? WHERE id=?').run('Booked', id);
+      sqlite.prepare('UPDATE inquiries SET status=?, revision=? WHERE id=?').run('Booked', crypto.randomUUID(), id);
       sqlite.prepare('INSERT INTO events(id,title,date,start,end,venue,type,notes,revision) VALUES(?,?,?,?,?,?,?,?,?)').run(linked, 'Racing new booking', valid.date, '', '', valid.venue, 'Private booking', 'New plan', crypto.randomUUID());
     };
     assert.equal((await post({ action: 'status', id, status: 'Declined' })).status, 409);
