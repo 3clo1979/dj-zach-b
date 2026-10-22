@@ -15,6 +15,13 @@
       "when": 1792603749558,
       "tag": "0001_young_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792648009293,
+      "tag": "0002_client_testimonials",
+      "breakpoints": true
     }
   ]
 }

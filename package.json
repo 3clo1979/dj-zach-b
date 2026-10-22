@@ -11,7 +11,7 @@
     "deploy": "node scripts/deploy.mjs",
     "preview": "wrangler dev",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/verify-api.cjs && node scripts/verify-access.cjs",
+    "test": "node scripts/verify-api.cjs && node scripts/verify-access.cjs && node scripts/verify-testimonials.cjs && node scripts/verify-testimonials-ui.cjs && node scripts/verify-testimonial-form.cjs",
     "db:migrate": "wrangler d1 migrations apply dj-zach-b --remote --config wrangler.jsonc"
   },
   "dependencies": {
