@@ -4,6 +4,41 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const ts = require('typescript');
 const { renderToStaticMarkup } = require('react-dom/server');
+// CSS contract + sizing arithmetic, not a substitute for browser layout QA.
+// The loaded frame must hug an unchanged photo rather than letterbox it into 4:5.
+const photoCss = fs.readFileSync('app/studio/studio.css', 'utf8');
+const loadedRule = photoCss.match(/\.studio-photo-frame\.has-photo\{([^}]+)\}/)?.[1] || '';
+const imageRule = photoCss.match(/\.studio-photo-frame img\{([^}]+)\}/)?.[1] || '';
+for (const declaration of ['display:block', 'width:fit-content', 'max-width:100%', 'aspect-ratio:auto']) assert(loadedRule.includes(declaration), declaration);
+for (const declaration of ['width:auto', 'height:auto', 'object-fit:contain', 'max-width:calc(var(--studio-frame-size,180px) - 2 * var(--studio-frame-edge))', 'max-height:calc(var(--studio-frame-max-height) - 2 * var(--studio-frame-edge))']) assert(imageRule.includes(declaration), declaration);
+assert.doesNotMatch(imageRule, /(?:width|height):100%|object-fit:cover/);
+assert(photoCss.includes('.studio-photo-preview img{max-width:100%;max-height:320px;width:auto;height:auto;object-fit:contain}'));
+assert(photoCss.includes('.studio-header-photo .studio-photo-frame{--studio-frame-edge:5px;--studio-frame-max-height:58px;'));
+assert(photoCss.includes('.studio-photo-settings .studio-photo-frame{--studio-frame-size:180px;--studio-frame-max-height:240px;'));
+assert(photoCss.includes('.studio-photo-settings .studio-photo-frame{--studio-frame-size:155px;--studio-frame-edge:11px;'));
+assert(photoCss.indexOf('.studio-photo-frame.has-photo{') < photoCss.indexOf('.studio-photo-settings .studio-photo-frame{'), 'Settings caps retain cascade precedence');
+const headerSizes = [...photoCss.matchAll(/\.studio-header-photo\{[^}]*--studio-frame-size:(\d+)px/g)].map(match => Number(match[1]));
+assert.deepEqual(headerSizes, [134, 150, 110, 93, 69, 60, 42], 'existing responsive header widths preserved; final mobile cap wins');
+assert(photoCss.includes('top:42px;right:calc(6% + 53px);--studio-frame-size:42px;width:var(--studio-frame-size);transform:translateY(-50%) rotate(3deg)'), 'all photo ratios stay centered in the mobile brand bar');
+const bounds = [
+  { name: 'desktop', width: 134, height: 190, edge: 13 },
+  { name: 'large desktop', width: 150, height: 190, edge: 13 },
+  { name: 'tablet', width: 110, height: 190, edge: 13 },
+  { name: 'narrow tablet', width: 93, height: 190, edge: 13 },
+  { name: 'mobile header', width: 42, height: 58, edge: 5 },
+  { name: 'Settings desktop', width: 180, height: 240, edge: 13 },
+  { name: 'Settings mobile', width: 155, height: 240, edge: 11 },
+];
+for (const box of bounds) for (const [w, h] of [[1000,1000],[900,1200],[1600,900],[100,1000],[1000,100],[12,12]]) {
+  const scale = Math.min(1, (box.width - 2 * box.edge - 2) / w, (box.height - 2 * box.edge - 2) / h);
+  const photoW = w * scale, photoH = h * scale;
+  const frameW = photoW + 2 + 2 * box.edge, frameH = photoH + 2 + 2 * box.edge;
+  assert(frameW <= box.width + 0.001 && frameH <= box.height + 0.001, box.name + ' stays inside its bounds');
+  assert(Math.abs(photoW / photoH - w / h) < 0.000001, box.name + ' preserves the entire photo ratio');
+  if (w === h) assert.equal(frameW, frameH, box.name + ' square photo gets a square frame, not portrait bars');
+}
+console.log('Photo fit contract passed: natural loaded frame and preview, 42 square/portrait/landscape/extreme-ratio sizing cases, desktop/mobile/Settings caps. Browser rendering not simulated.');
+
 const slots = [], effects = [], listeners = new Map(), activeUrls = new Set();
 let cursor = 0, initial = true, confirmed = true, stored = false, unauthorized = false, uncertain = false, gate = null, puts = 0, deletes = 0, urlCount = 0, stateWrites = 0;
 const VERSION = '12345678-1234-1234-1234-123456789abc';
