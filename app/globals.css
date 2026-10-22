@@ -94,7 +94,7 @@ footer>div.footer-links{gap:3px;align-items:stretch;justify-self:end}
 @media(max-width:760px){.client-testimonials{padding:5px 0 55px}.testimonials-heading{grid-template-columns:1fr;gap:22px;margin-bottom:25px}.testimonials-heading .section-index{margin-bottom:20px}.testimonials-heading h2{font-size:40px}.testimonials-heading p{max-width:none}.testimonials-grid{grid-template-columns:1fr}.testimonial-card{padding:25px}.testimonial-card blockquote{font-size:20px}.testimonial-empty{gap:18px}.testimonial-empty h3{font-size:23px}.testimonial-empty p{font-size:12px}.testimonial-page{grid-template-columns:1fr;gap:30px;padding:40px 0 55px}.testimonial-intro h1{font-size:50px;margin:25px 0}.testimonial-intro>p{max-width:none;font-size:13px}.testimonial-process{margin:25px 0 20px}.testimonial-form-shell{padding:25px 20px}.testimonial-site-header>.text-link{font-size:10px;gap:8px}.testimonial-success h2{font-size:36px}.testimonial-page-bottom{flex-wrap:wrap;font-size:8px}}
 @media(max-width:380px){.testimonial-site-header>.text-link{font-size:9px;gap:5px}.testimonial-intro h1{font-size:44px}.testimonial-page-bottom{gap:10px}}
 
-/* Two real photographs, one stable hero. Manual navigation only. */
+/* Two real photographs, one stable hero, with controllable rotation. */
 .hero-carousel{touch-action:pan-y pinch-zoom;isolation:isolate}
 .hero-carousel .hero-slide{position:absolute;inset:0;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .35s ease,visibility 0s linear .35s}
 .hero-carousel .hero-slide.is-active{opacity:1;visibility:visible;transition:opacity .35s ease}
@@ -105,10 +105,12 @@ footer>div.footer-links{gap:3px;align-items:stretch;justify-self:end}
 .hero-carousel .photo-overline,.hero-carousel .hero-caption{z-index:2}
 .hero-photo-controls{position:absolute;z-index:3;right:24px;bottom:38px;display:flex;gap:2px;padding:2px;border-radius:30px;background:#151a1466}
 .hero-photo-dot{display:grid;place-items:center;width:44px;height:44px;padding:0;border:0;border-radius:50%;background:transparent;color:white}
+.hero-photo-playback{display:grid;place-items:center;width:62px;height:44px;padding:0 8px;border:0;border-radius:22px;background:transparent;color:white;font-size:10px;font-weight:600;letter-spacing:.4px}
+.hero-photo-playback:hover{background:#ffffff1a}
 .hero-photo-dot span{width:9px;height:9px;border:1px solid #fff;border-radius:50%;background:transparent;transition:background .2s ease,transform .2s ease}
 .hero-photo-dot[aria-pressed=true] span{background:#fff;transform:scale(1.3)}
 .hero-photo-dot:hover span{background:#ffffff99}
-.hero-photo-dot:focus-visible{outline:2px solid white;outline-offset:1px;background:#151a14}
+.hero-photo-dot:focus-visible,.hero-photo-playback:focus-visible{outline:2px solid white;outline-offset:1px;background:#151a14}
 .hero-photo-status{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
 @media(max-width:760px){.hero-carousel .hero-slide-wedding img{object-position:center 45%}.hero-carousel .hero-slide-zach img{object-position:32% 50%}.hero-carousel .hero-caption{bottom:78px;font-size:28px;line-height:1.25}.hero-photo-controls{bottom:16px;right:24px}}
 @media(prefers-reduced-motion:reduce){.hero-carousel .hero-slide,.hero-carousel .hero-slide.is-active,.hero-photo-dot span{transition:none}}

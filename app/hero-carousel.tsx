@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 const photos = [
   {
@@ -23,8 +23,52 @@ const photos = [
 
 export default function HeroCarousel() {
   const [active, setActive] = useState(0);
+  const [autoPlay, setAutoPlay] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [focusWithin, setFocusWithin] = useState(false);
+  const [pageVisible, setPageVisible] = useState(false);
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   const gesture = useRef<{ id: number; x: number; y: number } | null>(null);
+  const running = autoPlay && !hovered && !focusWithin && pageVisible;
+
+  useEffect(() => {
+    const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const updateVisibility = () => setPageVisible(document.visibilityState === 'visible');
+    // A new reduced-motion preference stops rotation; only Play starts it again.
+    const updateMotion = () => { if (motion.matches) setAutoPlay(false); };
+    setAutoPlay(!motion.matches);
+    updateVisibility();
+    motion.addEventListener('change', updateMotion);
+    document.addEventListener('visibilitychange', updateVisibility);
+    return () => {
+      motion.removeEventListener('change', updateMotion);
+      document.removeEventListener('visibilitychange', updateVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    // One timeout per visible photo; every resume gets a fresh four seconds.
+    const timer = window.setTimeout(() => {
+      if (document.visibilityState === 'visible') {
+        setActive(current => (current + 1) % photos.length);
+      } else {
+        setPageVisible(false);
+      }
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [running, active]);
+
+  function selectPhoto(index: number) {
+    setAutoPlay(false);
+    setActive(index);
+  }
+
+  function togglePlayback() {
+    // Explicit Play opts back in without moving focus. A new focus event pauses again.
+    if (!autoPlay) setFocusWithin(false);
+    setAutoPlay(current => !current);
+  }
 
   function selectWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     // Leave browser/assistive-technology shortcuts (for example Ctrl+Home) alone.
@@ -36,7 +80,7 @@ export default function HeroCarousel() {
     else if (event.key === 'End') next = photos.length - 1;
     else return;
     event.preventDefault();
-    setActive(next);
+    selectPhoto(next);
     buttons.current[next]?.focus();
   }
 
@@ -44,6 +88,7 @@ export default function HeroCarousel() {
     gesture.current = null;
     if (event.pointerType !== 'touch' || !event.isPrimary) return;
     if ((event.target as HTMLElement).closest('button')) return;
+    setAutoPlay(false);
     gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
   }
 
@@ -64,6 +109,12 @@ export default function HeroCarousel() {
       role="region"
       aria-roledescription="carousel"
       aria-label="Celebrations with DJ Zach B"
+      onPointerEnter={event => { if (event.pointerType !== 'touch') setHovered(true); }}
+      onPointerLeave={event => { if (event.pointerType !== 'touch') setHovered(false); }}
+      onFocusCapture={() => setFocusWithin(true)}
+      onBlurCapture={event => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocusWithin(false);
+      }}
       onPointerDown={startGesture}
       onPointerUp={finishGesture}
       onPointerCancel={() => { gesture.current = null; }}
@@ -92,7 +143,15 @@ export default function HeroCarousel() {
       <div className="photo-shade" aria-hidden="true" />
       <span className="photo-overline">THE START OF SOMETHING GOOD.</span>
       <div className="hero-caption">A little romance.<br /><em>A lot of rhythm.</em></div>
-      <div className="hero-photo-controls" role="group" aria-label="Choose a photo">
+      <div className="hero-photo-controls" role="group" aria-label="Photo controls">
+        <button
+          type="button"
+          className="hero-photo-playback"
+          aria-label={autoPlay ? 'Pause automatic photo rotation' : 'Play automatic photo rotation'}
+          aria-controls="hero-slide-wedding hero-slide-zach"
+          aria-describedby="hero-rotation-help"
+          onClick={togglePlayback}
+        >{autoPlay ? 'Pause' : 'Play'}</button>
         {photos.map((photo, index) => (
           <button
             key={photo.id}
@@ -102,12 +161,16 @@ export default function HeroCarousel() {
             aria-label={`Show photo ${index + 1} of ${photos.length}: ${photo.title}`}
             aria-controls={`hero-slide-${photo.id}`}
             aria-pressed={active === index}
-            onClick={() => setActive(index)}
+            onClick={() => selectPhoto(index)}
             onKeyDown={event => selectWithKeyboard(event, index)}
           ><span aria-hidden="true" /></button>
         ))}
       </div>
-      <span className="hero-photo-status" role="status" aria-live="polite" aria-atomic="true">
+      <span id="hero-rotation-help" className="hero-photo-status">
+        Photos change every 4 seconds. Hovering or focusing the controls pauses rotation.
+        Choosing a photo stops rotation until you press Play. Hovering still pauses it after Play.
+      </span>
+      <span className="hero-photo-status" role="status" aria-live={running ? 'off' : 'polite'} aria-atomic="true">
         Photo {active + 1} of {photos.length}: {photos[active].title}
       </span>
     </div>
