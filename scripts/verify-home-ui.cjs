@@ -46,6 +46,7 @@ function harness() {
       if (name === 'react') return hooks;
       if (name === './booking-finance-contract') return finance.exports;
       if (name === './testimonials-section') return { __esModule: true, default: () => null };
+      if (name === './hero-carousel') return { __esModule: true, default: () => null };
       if (name === 'next/link') throw new Error('Homepage links must keep native anchor navigation.');
       return require(name);
     },
