@@ -19,7 +19,7 @@ type Testimonial = {
   consentAt: string;
   consentVersion: string;
 };
-type Props = { active: boolean; onPendingCountChange: (count: number | null) => void };
+type Props = { active: boolean; onPendingCountChange: (count: number | null) => void; refreshKey?: number };
 const statuses: Status[] = ['Pending', 'Published', 'Archived'];
 const stamp = (value: string) => {
   const date = new Date(value);
@@ -37,7 +37,7 @@ function serverError(value: unknown, fallback: string) {
   return value && typeof value === 'object' && 'error' in value && typeof value.error === 'string' ? value.error : fallback;
 }
 
-export default function TestimonialsPanel({ active, onPendingCountChange }: Props) {
+export default function TestimonialsPanel({ active, onPendingCountChange, refreshKey = 0 }: Props) {
   const [rows, setRows] = useState<Testimonial[]>([]);
   const [filter, setFilter] = useState<Status>('Pending');
   const [loading, setLoading] = useState(true);
@@ -88,7 +88,7 @@ export default function TestimonialsPanel({ active, onPendingCountChange }: Prop
   useEffect(() => {
     const refresh = setTimeout(() => { if (!inFlight.current) void load(); }, 0);
     return () => clearTimeout(refresh);
-  }, [active, load]);
+  }, [active, load, refreshKey]);
 
   async function moderate(row: Testimonial, status: Status) {
     if (inFlight.current || loading) return;
@@ -136,7 +136,7 @@ export default function TestimonialsPanel({ active, onPendingCountChange }: Prop
   const visible = rows.filter(row => row.status === filter);
   return <section className="studio-testimonials" aria-labelledby="testimonials-heading" aria-busy={loading || busy}>
     <div className="testimonial-panel-heading">
-      <div><h2 id="testimonials-heading">Client <em>testimonials.</em></h2><p>Original experiences, shared with permission.</p></div>
+      <div><h2 id="testimonials-heading">The review queue</h2><p>Original experiences, shared with permission.</p></div>
       <a className="text-link" href="/testimonials" target="_blank" rel="noreferrer">Open submission form ↗</a>
     </div>
     <p className="notice">Only Published entries appear under “Selected client testimonials.” Check that each submission is a genuine client experience before publishing; use the private email to clarify anything uncertain. Email addresses and moderation details are never shown publicly. Do not publish private information included in the testimonial itself.</p>
