@@ -19,7 +19,7 @@
 @media(max-width:380px){.hero-credentials{gap:10px}.credential-badge{padding:17px 14px}.credential-badge>b{font-size:46px}.credential-badge>span{font-size:9px;letter-spacing:.6px;gap:7px}.credential-badge svg{width:16px;height:16px}}
 
 /* Consistent, semantic footer icon set; labels remain the link names. */
-footer .footer-links{gap:3px;align-items:stretch;justify-self:end}
+footer>div.footer-links{gap:3px;align-items:stretch;justify-self:end}
 .footer-links a,.footer-bottom a{display:inline-flex;align-items:center;gap:12px;min-height:40px}
 .footer-links svg,.footer-bottom svg{flex-shrink:0;color:#d5bd83;stroke-width:1.6}
 .footer-links a:hover span,.footer-bottom a:hover{text-decoration:underline;text-underline-offset:5px}
@@ -27,7 +27,7 @@ footer .footer-links{gap:3px;align-items:stretch;justify-self:end}
 .footer-bottom{align-items:center}
 .footer-bottom a{gap:9px}
 .service-choice>span>svg{flex-shrink:0;stroke-width:1.7}
-@media(max-width:760px){footer .footer-links{justify-self:start}.footer-links a{min-height:44px}.footer-bottom a{min-height:40px}}
+@media(max-width:760px){footer>div.footer-links{justify-self:start}.footer-links a{min-height:44px}.footer-bottom a{min-height:40px}}
 
 
 /* Transparent headphone emblem: scaled to the editorial navigation. */
