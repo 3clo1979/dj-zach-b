@@ -13,3 +13,12 @@
 .header-logo{filter:brightness(0)}
 .vinyl-label .vinyl-logo{display:block;width:112px;height:112px;object-fit:contain;filter:brightness(0);margin:4px auto}
 @media(max-width:760px){.vinyl-label .vinyl-logo{width:96px;height:96px}}
+
+/* Quiet studio credit, separate from Zach's business links. */
+.creator-credit{grid-column:1/-1;display:flex;justify-content:center;margin-top:-12px;padding-top:8px}
+.creator-credit a{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:44px;max-width:100%;color:#b3b6a2;font-size:10px;line-height:1.5;letter-spacing:.25px;text-align:center}
+.creator-credit img{width:30px;height:30px;flex-shrink:0;object-fit:contain;border-radius:7px}
+.creator-credit strong{font-weight:500;color:#d3c294}
+.creator-credit a:hover strong,.creator-credit a:focus-visible strong{color:#f4e5bb;text-decoration:underline;text-underline-offset:4px}
+.creator-credit svg{flex-shrink:0;color:#b79a60}
+@media(max-width:380px){.creator-credit a{font-size:9px;gap:8px}}
