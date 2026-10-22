@@ -113,7 +113,11 @@ function populate(form) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
     assert(!source.includes('next/link'), file + ': all testimonial entry/return links avoid the incompatible client router');
   }
-  assert.match(fs.readFileSync(path.join(root, 'app/home.tsx'), 'utf8'), /<a href="\/testimonials">Share your experience ↗<\/a>/, 'footer uses native navigation too');
+  const footerSource = fs.readFileSync(path.join(root, 'app/home.tsx'), 'utf8').split('<footer')[1];
+  const footerShareLink = footerSource?.match(/<a\b[^>]*href="\/testimonials"[^>]*>([\s\S]*?)<\/a>/)?.[0];
+  assert(footerShareLink, 'footer uses a native testimonial anchor');
+  assert.match(footerShareLink, /Share your experience/, 'footer testimonial action remains readable beside its icon');
+  assert.doesNotMatch(footerShareLink, /onClick\s*=/, 'footer testimonial navigation has no router click interception');
   const calls = [];
   const form = harness('app/testimonials/testimonial-form.tsx', async (_, options) => {
     calls.push(JSON.parse(options.body));
