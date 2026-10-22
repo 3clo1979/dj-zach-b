@@ -11,6 +11,11 @@ const data = helper.exports;
 const fieldsModule = { exports: {} };
 vm.runInNewContext(transpile('app/studio/event-detail-fields.tsx'), { module: fieldsModule, exports: fieldsModule.exports, require: name => name === '../event-details-contract' ? contract : name === './studio-data' ? data : require(name) });
 const fields = fieldsModule.exports;
+const snapshotDataModule = { exports: {} };
+vm.runInNewContext(transpile('app/studio/business-snapshot-data.ts'), { module: snapshotDataModule, exports: snapshotDataModule.exports, Date, Intl });
+const snapshotModule = { exports: {} };
+vm.runInNewContext(transpile('app/studio/business-snapshot.tsx'), { module: snapshotModule, exports: snapshotModule.exports, Date, Intl, require: name => name === './business-snapshot-data' ? snapshotDataModule.exports : name.endsWith('.css') ? {} : require(name) });
+const Snapshot = snapshotModule.exports.default;
 const text = node => Array.isArray(node) ? node.map(text).join('') : node && typeof node === 'object' ? text(node.props?.children) : node == null || typeof node === 'boolean' ? '' : String(node);
 const elements = (node, test) => Array.isArray(node) ? node.flatMap(child => elements(child, test)) : !node || typeof node !== 'object' || !node.props ? [] : [...(test(node) ? [node] : []), ...elements(node.props.children, test)];
 const today = data.localDay();
@@ -33,7 +38,7 @@ function harness() {
   const mod = { exports: {} };
   vm.runInNewContext(transpile('app/studio/studio.tsx'), {
     module: mod, exports: mod.exports,
-    require(name) { if (name === 'react') return hooks; if (name === './studio-data') return data; if (name === './event-detail-fields') return fields; if (name === './testimonials-panel') return { __esModule: true, default: Panel }; if (name === './studio-photo') return { __esModule: true, default: Photo }; if (name.endsWith('.css')) return {}; if (name === 'next/link') throw new Error('Studio must use native anchors.'); return require(name); },
+    require(name) { if (name === 'react') return hooks; if (name === './studio-data') return data; if (name === './business-snapshot') return snapshotModule.exports; if (name === './event-detail-fields') return fields; if (name === './testimonials-panel') return { __esModule: true, default: Panel }; if (name === './studio-photo') return { __esModule: true, default: Photo }; if (name.endsWith('.css')) return {}; if (name === 'next/link') throw new Error('Studio must use native anchors.'); return require(name); },
     fetch: async (url, options = {}) => {
       calls.push({ url, options }); assert.equal(url, '/api/manage');
       if (!options.method) {
@@ -67,6 +72,10 @@ function harness() {
 (async () => {
   const h = harness(); assert.match(h.html(), /Finding your next date/); assert.match(h.html(), /— new inquiries/, 'not false zero while loading'); await h.settle(); h.setPending(2); await h.settle();
   assert.match(h.html(), /2 testimonials waiting/); assert.match(h.html(), /1 new inquiry/); assert.match(h.html(), /Local test event/); assert.doesNotMatch(h.html(), /Sample Event|Event checklist ready/);
+  h.clickAnchor('#snapshot'); await h.settle(); assert.match(h.html(), /Last 30 complete days/); assert.match(h.html(), /Website visits &amp; daily average/); assert.match(h.html(), /Not connected/); assert.doesNotMatch(h.html(), /qa@example.invalid|Private fixture notes|&lt;script&gt;name/);
+  const snapshot = h.find(node => node.type === Snapshot); snapshot.props.onReviewNew(); h.navigate('#bookings'); await h.settle();
+  assert.equal(h.find(node => node.type === 'select' && !node.props['aria-label']).props.value, 'New', 'snapshot follow-up opens New filter');
+  h.find(node => node.type === 'select' && !node.props['aria-label']).props.onChange({ target: { value: 'All' } }); await h.settle();
   h.navigate('#bookings'); await h.settle(); assert.match(h.html(), /Booking Desk/); assert.match(h.html(), /&lt;script&gt;name&lt;\/script&gt;/); assert.doesNotMatch(h.html(), /<script>name/);
   const release = h.holdPosts(); h.changeStatus('Contacted'); h.changeStatus('Contacted'); await h.settle(); assert.equal(h.countPosts(), 1, 'duplicate synchronous status changes guarded'); assert.equal(h.find(node => node.type === 'select' && node.props['aria-label']).props.disabled, true); release(); await h.settle(); assert.match(h.html(), /Saved. Your desk is up to date/);
   h.navigate('#deck'); await h.settle(); assert.match(h.html(), /0 new inquiries/); h.setPending(0); await h.settle(); assert.match(h.html(), /all caught up/);
@@ -85,7 +94,7 @@ function harness() {
   h.navigate('#settings'); await h.settle(); assert.match(h.html(), /What your desk does today/); assert.match(h.html(), /Yahoo \/ phone sync is not connected/);
   h.navigate('#bookings'); await h.settle(); h.setPostFailure('malformed'); h.changeStatus('Booked'); await h.settle(); assert.match(h.html(), /may already be saved/); assert.doesNotMatch(h.html(), /qa@example.invalid/, 'unconfirmed malformed success clears private controls');
   h.setPostFailure(''); h.button('Refresh desk').props.onClick(); await h.settle(); assert.match(h.html(), /qa@example.invalid/);
-  h.setGetFailure('403'); h.button('Refresh desk').props.onClick(); await h.settle(); assert.doesNotMatch(h.html(), /qa@example.invalid/); assert.match(h.html(), /Manager sign-in required/); h.navigate('#deck'); await h.settle(); assert.match(h.html(), /— new inquiries/); assert.doesNotMatch(h.html(), /Local test event/);
+  h.navigate('#snapshot'); await h.settle(); h.setGetFailure('403'); h.button('Refresh desk').props.onClick(); await h.settle(); assert.doesNotMatch(h.html(), /qa@example.invalid/); assert.match(h.html(), /Manager sign-in required/); assert.match(h.html(), /Your snapshot is unavailable/); assert.doesNotMatch(h.html(), /snapshot-metric/); h.navigate('#deck'); await h.settle(); assert.match(h.html(), /— new inquiries/); assert.doesNotMatch(h.html(), /Local test event/);
   h.setGetFailure(''); h.setRows([], []); h.button('Refresh desk').props.onClick(); await h.settle(); assert.match(h.html(), /Your next good night awaits/); assert.match(h.html(), /No saved events or blocked dates/);
   h.navigate('#bookings'); await h.settle(); assert.match(h.html(), /A fresh start/);
   h.setGetFailure('html'); h.button('Refresh desk').props.onClick(); await h.settle(); assert.match(h.html(), /session may have expired/);

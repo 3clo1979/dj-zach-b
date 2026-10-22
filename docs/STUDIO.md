@@ -7,10 +7,11 @@ The private `/studio` uses the existing Access-protected management APIs; the pu
 - **On the Deck:** real Pending testimonial count, New inquiry count, next saved non-blocked event, next seven calendar days, upcoming booking/public-appearance counts. Loading/unavailable counts are `—`, never fabricated zeroes. A blocked date appears in the weekly agenda but is not advertised as the next event.
 - **Booking Desk:** existing inquiry status changes, email/phone links and booking lifecycle. Changing an inquiry to Booked still creates its private schedule entry; changing away releases it.
 - **Calendar:** local calendar dates, month navigation, selected-day details, upcoming/past/all schedule, add/remove flows, and unchanged all-day ICS downloads with event times in notes. Saved events have a private services/bring-along plan, editable notes and a primary contact; see [EVENT-DETAILS.md](./EVENT-DETAILS.md). No empty day implies confirmed availability; phone/Yahoo sync and email notifications are not connected.
+- **Business Snapshot:** read-only inquiry cohorts, current Booked conversion, New-status follow-up queue, a monthly inquiry trend, and separate upcoming calendar-booking counts. Known TEST records are excluded only here. Visits, booking value, and ROI are explicitly unavailable, not zero. See [BUSINESS-SNAPSHOT.md](./BUSINESS-SNAPSHOT.md) for date windows, limitations, and exact TEST rules.
 - **Client Voices:** the existing original-wording, version-checked publish/unpublish/archive/restore flow and audit evidence. The dashboard and navigation badges follow its successful private fetches.
 - **Settings:** original-photo frame upload and practical connection/privacy notes. See [STUDIO-PHOTO.md](./STUDIO-PHOTO.md) for storage limits, authorization, and backup retention.
 
-Navigation uses native anchors and URL hashes, with Back/Forward support. Mobile keeps the same four primary destinations in bottom navigation and Settings in its menu. The public-site link uses a new tab. No Next/Vinext Link runtime dependency was introduced.
+Navigation uses native anchors and URL hashes, with Back/Forward support. Mobile keeps all five primary destinations in bottom navigation and Settings in its menu. The public-site link uses a new tab. No Next/Vinext Link runtime dependency was introduced.
 
 ## Safety and recovery
 

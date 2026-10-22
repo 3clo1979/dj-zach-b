@@ -66,7 +66,7 @@ export function servicesLabel(value: string) {
 }
 export function parseStudioHash(hash: string): { view: string; event: string | null } {
   const [view, search] = hash.replace(/^#/, '').split('?');
-  return { view: ['deck', 'bookings', 'calendar', 'voices', 'settings', 'add-date'].includes(view) ? view : 'deck', event: new URLSearchParams(search).get('event') };
+  return { view: ['deck', 'bookings', 'calendar', 'snapshot', 'voices', 'settings', 'add-date'].includes(view) ? view : 'deck', event: new URLSearchParams(search).get('event') };
 }
 function escapeCalendar(value: string) { return value.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\r/g, ''); }
 export function calendarFile(event: Entry, now = new Date()) {

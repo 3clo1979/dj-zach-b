@@ -1,0 +1,59 @@
+/* Business Snapshot is a read-only extension of the private Studio palette. */
+.business-snapshot{display:grid;gap:25px;padding-bottom:14px}
+.snapshot-period{display:flex;justify-content:space-between;align-items:flex-start;gap:22px;padding:8px 0 2px}
+.snapshot-period .studio-eyebrow{margin-bottom:9px}
+.snapshot-period h2{font-size:27px;margin-bottom:8px}
+.snapshot-period p:not(.studio-eyebrow){font-size:11px;color:var(--muted)}
+.snapshot-period .snapshot-as-of{margin-top:6px}
+.snapshot-period>.studio-pill{display:flex;align-items:center;gap:6px;flex-shrink:0;margin-top:6px;white-space:normal}
+.snapshot-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:15px}
+.snapshot-metric{display:flex;flex-direction:column;min-width:0;padding:23px}
+.snapshot-metric h3{font-family:var(--sans);font-size:12px;line-height:1.6;min-height:38px;color:#e7dfcd;margin-bottom:14px}
+.snapshot-metric strong{font-size:clamp(38px,4vw,52px);font-weight:500;letter-spacing:-1.7px;line-height:1.1;color:#f4d18a;margin-bottom:17px}
+.snapshot-metric p{font-size:11px;color:var(--muted);line-height:1.8;margin:0}
+.snapshot-metric .snapshot-comparison{display:flex;align-items:flex-start;gap:6px;color:#eee3ca;font-size:11px;min-height:42px;margin-bottom:10px}
+.snapshot-comparison svg{margin-top:2px}
+.snapshot-metric a{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;font-size:11px;color:#f1ce86;padding-top:13px;margin-top:auto}
+.snapshot-followup{background:radial-gradient(ellipse at 100% 0,#a3782d20,transparent 70%),#1a1e14}
+.snapshot-cohort-note{font-size:11px;color:#c5c1b5;line-height:1.8;padding-left:13px;border-left:2px solid #8b7247;margin:-8px 0 0}
+.snapshot-detail-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px}
+.snapshot-detail-grid>.deck-card{min-width:0}
+.snapshot-detail-grid h2{font-size:28px;margin-bottom:10px}
+.snapshot-section-intro,.snapshot-schedule>p{color:var(--muted);font-size:12px;line-height:1.8}
+.snapshot-trend{margin:15px 0 0}
+.snapshot-trend svg{width:100%;height:auto;display:block;overflow:visible}
+.snapshot-chart-baseline{stroke:#60563f;stroke-width:1}
+.snapshot-chart-bar{fill:#9e8757}
+.snapshot-chart-current{fill:#e5bc6f}
+.snapshot-chart-count{fill:#f6e8c9;font-size:18px;font-family:var(--sans)}
+.snapshot-chart-label{fill:#c4beb0;font-size:14px;font-family:var(--sans)}
+.snapshot-trend figcaption{font-size:10px;color:var(--muted);line-height:1.8;margin-top:11px}
+.snapshot-schedule{display:flex;flex-direction:column}
+.snapshot-schedule dl{margin:20px 0 16px;font-size:12px}
+.snapshot-schedule dl>div{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #54472e70}
+.snapshot-schedule dt{color:#e5dfce}
+.snapshot-schedule dd{font-size:20px;color:#f1cf8a;margin:0}
+.snapshot-schedule .studio-button{align-self:flex-start;margin-top:20px}
+.snapshot-next{margin-top:4px}
+.snapshot-next .deck-section-heading{margin-bottom:17px}
+.snapshot-not-connected{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px dashed #63583f;border-radius:9px;background:#141812}
+.snapshot-not-connected article{padding:23px;min-width:0}
+.snapshot-not-connected article+article{border-left:1px solid #4a4533}
+.snapshot-not-connected h3{font-size:22px;line-height:1.25;margin:15px 0 10px}
+.snapshot-not-connected p{font-size:11px;line-height:1.8;color:var(--muted)}
+.snapshot-methods{border-top:1px solid #51462f;color:var(--muted);font-size:11px;line-height:1.9}
+.snapshot-methods summary{color:#edcf95;cursor:pointer;padding:16px 0;min-height:44px}
+.snapshot-methods>div{max-width:900px;padding-bottom:7px}
+.snapshot-methods p{margin:0 0 12px}
+.snapshot-data-warning{color:#f3d399}
+.snapshot-empty{padding:35px;margin-top:8px}
+.snapshot-empty>svg{color:#d6b674;margin-bottom:14px}
+.snapshot-empty h2{margin-bottom:12px}
+.snapshot-empty p{color:var(--muted);font-size:13px;line-height:1.8}
+.deck-snapshot-link{display:flex;justify-content:space-between;align-items:center;gap:20px;padding:20px 24px;border:1px solid #a1844e;border-radius:9px;background:linear-gradient(100deg,#b28a3e18,#12170f)}
+.deck-snapshot-link span{display:block;font-size:12px;color:#c9c4b7;line-height:1.7}
+.deck-snapshot-link strong{display:block;color:#f1d69f;font-size:20px;font-weight:500;margin-bottom:3px}
+.deck-snapshot-link>svg{color:#efcd86}
+@media(max-width:1200px){.snapshot-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.snapshot-metric h3{min-height:0}.snapshot-metric .snapshot-comparison{min-height:0}.snapshot-period{flex-direction:column;gap:12px}.snapshot-period>.studio-pill{margin:0}.snapshot-detail-grid{grid-template-columns:1fr}.snapshot-schedule dl{max-width:480px}.snapshot-not-connected article{padding:19px}.snapshot-not-connected h3{font-size:21px}}
+@media(max-width:760px){.business-snapshot{gap:20px}.snapshot-period{padding-top:2px}.snapshot-period h2{font-size:25px;line-height:1.3}.snapshot-period p:not(.studio-eyebrow){line-height:1.9}.snapshot-period>.studio-pill{font-size:9px}.snapshot-cards{gap:12px}.snapshot-metric{padding:18px}.snapshot-metric h3{font-size:11px;margin-bottom:13px}.snapshot-metric strong{font-size:41px;margin-bottom:13px}.snapshot-metric p,.snapshot-metric .snapshot-comparison{font-size:10px}.snapshot-metric a{font-size:10px;line-height:1.7}.snapshot-metric a svg{width:14px}.snapshot-cohort-note{font-size:10px;margin-top:0}.snapshot-detail-grid{gap:16px}.snapshot-detail-grid h2{font-size:26px}.snapshot-not-connected{grid-template-columns:1fr}.snapshot-not-connected article{padding:21px}.snapshot-not-connected article+article{border-left:0;border-top:1px solid #4a4533}.snapshot-not-connected h3{font-size:24px}.snapshot-not-connected p{font-size:12px}.snapshot-not-connected .studio-pill{font-size:9px}.snapshot-methods{font-size:11px}.snapshot-chart-label{font-size:22px}.snapshot-chart-count{font-size:23px}.snapshot-trend figcaption{font-size:10px}.deck-snapshot-link{padding:18px 20px}.deck-snapshot-link span{font-size:11px}.deck-snapshot-link strong{font-size:21px}.studio-bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr));padding-left:2%;padding-right:2%}.studio-bottom-nav a{font-size:9px}}
+@media(max-width:380px){.snapshot-cards{grid-template-columns:1fr}.snapshot-metric{padding:22px}.snapshot-metric h3{font-size:12px}.snapshot-metric p,.snapshot-metric .snapshot-comparison,.snapshot-metric a{font-size:11px}.snapshot-period h2{font-size:24px}}

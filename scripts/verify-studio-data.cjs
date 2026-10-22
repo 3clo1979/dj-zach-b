@@ -107,7 +107,7 @@ group('day arithmetic stays calendar-based across US DST and preserves local noo
 });
 
 group('hash parsing accepts only Studio views and decodes event IDs', () => {
-  for (const view of ['deck', 'bookings', 'calendar', 'voices', 'settings', 'add-date']) assert.deepEqual(plain(parseStudioHash('#' + view)), { view, event: null });
+  for (const view of ['deck', 'bookings', 'calendar', 'snapshot', 'voices', 'settings', 'add-date']) assert.deepEqual(plain(parseStudioHash('#' + view)), { view, event: null });
   for (const invalid of ['', '#', '#unknown', '#https://other.example', '#<script>']) assert.equal(parseStudioHash(invalid).view, 'deck');
   assert.deepEqual(plain(parseStudioHash('#calendar?event=booking%2Dlocal%2F1%20two')), { view: 'calendar', event: 'booking-local/1 two' });
   assert.deepEqual(plain(parseStudioHash('bookings?filter=New')), { view: 'bookings', event: null });

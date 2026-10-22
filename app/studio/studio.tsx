@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowDownToLine, ArrowRight, CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ExternalLink, House, Inbox, LockKeyhole, MapPin, Menu, MessageSquare, Plus, RefreshCw, Settings, ShieldCheck, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, BarChart3, CalendarDays, CalendarPlus, Check, ChevronLeft, ChevronRight, ExternalLink, House, Inbox, LockKeyhole, MapPin, Menu, MessageSquare, Plus, RefreshCw, Settings, ShieldCheck, X } from 'lucide-react';
 import TestimonialsPanel from './testimonials-panel';
 import StudioPhoto from './studio-photo';
+import BusinessSnapshot from './business-snapshot';
 import EventDetailFields, { EventDetailSummary } from './event-detail-fields';
 import { type EventDetails } from '../event-details-contract';
 import { blankEntry, calendarFile, dashboard, entryDetails, formatDay, inquiryStatuses, localDay, monthDays, parseStudioHash, servicesLabel, shiftMonth, type Entry, type Inquiry } from './studio-data';
 import './studio.css';
+import './business-snapshot.css';
 
 type EventEditor = { id: string; revision: string; original: EventDetails; draft: EventDetails };
 function editorIsDirty(editor: EventEditor | null) { return !!editor && JSON.stringify(editor.original) !== JSON.stringify(editor.draft); }
@@ -16,10 +18,12 @@ const navigation = [
   { id: 'deck', label: 'On the Deck', short: 'Deck', icon: House },
   { id: 'bookings', label: 'Booking Desk', short: 'Bookings', icon: Inbox },
   { id: 'calendar', label: 'Calendar', short: 'Calendar', icon: CalendarDays },
+  { id: 'snapshot', label: 'Business Snapshot', short: 'Snapshot', icon: BarChart3 },
   { id: 'voices', label: 'Client Voices', short: 'Voices', icon: MessageSquare },
 ];
 const viewCopy: Record<string, { title: string; description: string }> = {
   deck: { title: 'On the Deck', description: 'A clear view of what needs you next.' },
+  snapshot: { title: 'Business Snapshot', description: 'A clear picture of the business you’re building.' },
   bookings: { title: 'Booking Desk', description: 'The next great night starts with a conversation.' },
   calendar: { title: 'Your calendar', description: 'Good nights ahead. Room for a little planning.' },
   voices: { title: 'Client Voices', description: 'Their words. Your good work. Shared with care.' },
@@ -52,6 +56,7 @@ export default function Studio() {
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [snapshotAsOf, setSnapshotAsOf] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [draft, setDraft] = useState(blankEntry);
   const [privateEditor, setPrivateEditor] = useState<EventEditor | null>(null);
@@ -83,10 +88,10 @@ export default function Studio() {
       if (!response.ok) throw new Error(data.error || 'Could not load your Studio. Try again.');
       if (!Array.isArray(data.inquiries) || !Array.isArray(data.events)) throw new Error('Could not read your Studio data. Try again.');
       if (!mounted.current || request.signal.aborted || current !== sequence.current) return false;
-      setInquiries(data.inquiries); setEvents(data.events); setHasLoaded(true); return { inquiries: data.inquiries, events: data.events };
+      setInquiries(data.inquiries); setEvents(data.events); setSnapshotAsOf(new Date().toISOString()); setHasLoaded(true); return { inquiries: data.inquiries, events: data.events };
     } catch (cause) {
       if (!mounted.current || request.signal.aborted || current !== sequence.current) return false;
-      setInquiries([]); setEvents([]); setHasLoaded(false);
+      setInquiries([]); setEvents([]); setSnapshotAsOf(null); setHasLoaded(false);
       if (sessionInvalid) { setPrivateEditor(null); setDraft(blankEntry); editorVersion.current++; formVersion.current++; }
       setError(cause instanceof Error ? cause.message : 'Could not load your Studio. Try again.'); return false;
     } finally { if (mounted.current && current === sequence.current) setLoading(false); }
@@ -141,7 +146,7 @@ export default function Studio() {
       if (!mounted.current) return false;
       confirmedResponse = response.ok || (response.status >= 400 && response.status < 500);
       if (!response.ok) {
-        if (response.status === 401 || response.status === 403) { setInquiries([]); setEvents([]); setHasLoaded(false); }
+        if (response.status === 401 || response.status === 403) { setInquiries([]); setEvents([]); setSnapshotAsOf(null); setHasLoaded(false); }
         throw new Error(data.error || 'Could not save this change.');
       }
       saved = true;
@@ -153,7 +158,7 @@ export default function Studio() {
       if (sessionInvalid) { setPrivateEditor(null); setDraft(blankEntry); editorVersion.current++; formVersion.current++; }
       // An interrupted response may follow a successful write. Never retry it automatically.
       if (!confirmedResponse) {
-        setInquiries([]); setEvents([]); setHasLoaded(false);
+        setInquiries([]); setEvents([]); setSnapshotAsOf(null); setHasLoaded(false);
         setNotice('This change may already be saved. Reload the list to check before trying again.');
       }
       setError(cause instanceof Error ? cause.message : 'Could not confirm this change. Reload the list before retrying.');
@@ -243,8 +248,10 @@ export default function Studio() {
           <div className="deck-two-up"><article className="deck-card deck-next"><p className="studio-eyebrow">Next event</p>{!known ? <div className="deck-card-placeholder"><CalendarDays size={26} aria-hidden="true"/><h2>{loading ? 'Finding your next date…' : 'Your schedule is unavailable'}</h2><p>{loading ? 'Getting your saved events.' : 'Refresh your desk to check the calendar.'}</p></div> : data.nextEvent ? <><div className="deck-next-detail"><DateTile value={data.nextEvent.date}/><div><h2>{data.nextEvent.title}</h2><p>{data.nextEvent.type}{data.nextEvent.start ? ' · ' + data.nextEvent.start : ''}</p>{data.nextEvent.venue && <p className="deck-venue"><MapPin size={14} aria-hidden="true"/>{data.nextEvent.venue}</p>}</div></div><a className="studio-button outline" href={eventLink(data.nextEvent)}>Open event<ArrowRight size={17} aria-hidden="true"/></a></> : <div className="deck-card-placeholder"><CalendarDays size={27} aria-hidden="true"/><h2>Your next good night awaits.</h2><p>No upcoming events saved. Add a date when it’s confirmed.</p><a className="studio-button outline" href="#calendar">Open calendar<ArrowRight size={17} aria-hidden="true"/></a></div>}</article>
           <article className="deck-card deck-inquiries"><p className="studio-eyebrow">Booking Desk</p><h2>{count(data.newInquiries)} new {data.newInquiries === 1 && known ? 'inquiry' : 'inquiries'}</h2><p>{known && data.newInquiries === 0 ? 'New requests from the website will land here.' : 'Start the next great night.'}</p><a className="studio-button outline" href="#bookings" onClick={() => setFilter(known && data.newInquiries > 0 ? 'New' : 'All')}>Review inquiries<ArrowRight size={17} aria-hidden="true"/></a></article></div>
           <section className="deck-card deck-week" aria-labelledby="week-heading"><div className="deck-section-heading"><div><h2 id="week-heading">Your next seven days</h2><p>Saved events and blocked dates, at a glance.</p></div><a href="#calendar">Open calendar<ArrowRight size={17} aria-hidden="true"/></a></div>{!known ? <p className="deck-empty">{loading ? 'Loading your week…' : 'Your week will appear when the desk can refresh.'}</p> : data.week.length ? <ul>{data.week.map(event => <li key={event.id}><time dateTime={event.date}>{formatDay(event.date, { month: 'short', day: 'numeric' })}</time><a href={eventLink(event)}>{event.title}<small>{event.venue || event.type}</small></a><span className="studio-pill">{event.type === 'Blocked date' ? 'Blocked' : event.isPublic ? 'Public' : 'Private'}</span><ArrowRight size={15} aria-hidden="true"/></li>)}</ul> : <p className="deck-empty">A clear week on your Studio calendar. No saved events or blocked dates in the next seven days.</p>}</section>
+          <a className="deck-snapshot-link" href="#snapshot"><span><strong>Business Snapshot</strong>Inquiries, booking conversion, and what needs a follow-up. Known TEST records stay out of the numbers.</span><BarChart3 size={30} aria-hidden="true"/></a>
           <div className="deck-metrics"><a href="#calendar"><b>{count(data.upcomingBookings)}</b><span>Upcoming bookings</span><ArrowRight size={16} aria-hidden="true"/></a><a href="#calendar"><b>{count(data.publicAppearances)}</b><span>Public appearances</span><ArrowRight size={16} aria-hidden="true"/></a></div>
         </section>}
+        {view === 'snapshot' && <BusinessSnapshot inquiries={inquiries} events={events} asOf={snapshotAsOf} loading={loading} hasLoaded={hasLoaded} onReviewNew={() => setFilter('New')}/>}
         {view === 'bookings' && <section aria-label="Booking inquiries" aria-busy={loading || busy}><div className="studio-section-toolbar"><label>Status<select value={filter} onChange={event => setFilter(event.target.value)}><option>All</option>{inquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></label><p>{known ? `${visibleInquiries.length} ${visibleInquiries.length === 1 ? 'inquiry' : 'inquiries'}` : 'Checking inquiries…'}</p></div>{loading ? <p className="studio-empty" role="status">Loading your Booking Desk…</p> : !hasLoaded ? <p className="studio-empty">Inquiries are unavailable. Reload your desk before making changes.</p> : !visibleInquiries.length ? <div className="studio-empty"><Inbox size={30} aria-hidden="true"/><h2>{filter === 'All' ? 'A fresh start.' : `No ${filter.toLowerCase()} inquiries.`}</h2><p>{filter === 'All' ? 'Requests from the website will appear here. Nothing to chase just yet.' : 'Choose another status to see the rest of your Booking Desk.'}</p></div> : visibleInquiries.map(inquiry => <article className="studio-record" key={inquiry.id}><div className="record-header"><div><small>{inquiry.eventType} · {formatDay(inquiry.date)}</small><h3>{inquiry.name}</h3><p>{inquiry.venue}</p></div><span className={'studio-pill ' + (inquiry.status === 'New' ? 'gold' : '')}>{inquiry.status}</span></div><div className="record-detail"><p>{servicesLabel(inquiry.services)}</p><p>{[inquiry.guests && inquiry.guests + ' guests', inquiry.hours].filter(Boolean).join(' · ')}</p><p>{inquiry.message || 'No additional notes.'}</p><small>Received {new Date(inquiry.createdAt).toLocaleString()}</small></div><div className="record-actions"><a href={'mailto:' + encodeURIComponent(inquiry.email)}>Email {inquiry.email}</a><a href={'tel:' + inquiry.phone}>Call {inquiry.phone}</a><label>Update status<select aria-label={'Status for ' + inquiry.name} disabled={busy || loading} value={inquiry.status} onChange={event => void changeInquiryStatus(inquiry, event.target.value)}>{inquiryStatuses.map(status => <option key={status}>{status}</option>)}</select></label></div></article>)}</section>}
         {view === 'calendar' && <section aria-label="Studio calendar" aria-busy={loading || busy}>
           <div className="studio-section-toolbar"><p>Saved dates only · check your phone before confirming.</p><a className="studio-button gold" href="#add-date" onClick={() => addDate(selectedDay || undefined)}><Plus size={17} aria-hidden="true"/>Add a date</a></div>
