@@ -27,6 +27,8 @@ export default function HeroCarousel() {
   const gesture = useRef<{ id: number; x: number; y: number } | null>(null);
 
   function selectWithKeyboard(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    // Leave browser/assistive-technology shortcuts (for example Ctrl+Home) alone.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     let next: number;
     if (event.key === 'ArrowRight') next = (index + 1) % photos.length;
     else if (event.key === 'ArrowLeft') next = (index - 1 + photos.length) % photos.length;

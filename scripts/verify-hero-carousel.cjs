@@ -60,6 +60,16 @@ for (const [index, key, expected] of [[0, 'ArrowRight', 1], [1, 'ArrowRight', 0]
 let tabPrevented = false;
 buttons()[0].props.onKeyDown({ key: 'Tab', preventDefault() { tabPrevented = true; } });
 assert.equal(tabPrevented, false, 'normal keyboard navigation is untouched');
+for (const modifier of ['altKey', 'ctrlKey', 'metaKey', 'shiftKey']) {
+  for (const key of ['ArrowLeft', 'ArrowRight', 'Home', 'End']) {
+    let prevented = false, focused = false;
+    buttons().forEach(button => button.props.ref({ focus() { focused = true; } }));
+    buttons()[1].props.onKeyDown({ key, [modifier]: true, preventDefault() { prevented = true; } });
+    render(); expectActive(0);
+    assert.equal(prevented, false, `${modifier}+${key} retains its browser behavior`);
+    assert.equal(focused, false);
+  }
+}
 function pointer(x, y, extra = {}) {
   return { pointerId: 1, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y,
     target: { closest() { return null; } }, ...extra };
